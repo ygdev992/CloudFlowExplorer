@@ -13,6 +13,7 @@ namespace CloudFlowExplorer
 
         // Controls
         private readonly Button _btnLoad;
+        private readonly Button _btnLoadFromSolution;
         private readonly TextBox _txtSearch;
         private readonly Button _btnSearch;
         private readonly DataGridView _gridFlows;
@@ -52,6 +53,17 @@ namespace CloudFlowExplorer
             };
             _btnLoad.Click += OnLoadClick;
 
+            _btnLoadFromSolution = new Button
+            {
+                Text = "Load Flows from Solution",
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                Location = new Point(panelTop.Width - 330, 8),
+                Width = 170,
+                Height = 28,
+                Enabled = false
+            };
+            _btnLoadFromSolution.Click += OnLoadFromSolutionClick;
+
             // Search row
             var lblSearch = new System.Windows.Forms.Label { Text = "Search in JSON:", AutoSize = true, Location = new Point(10, 48) };
             _txtSearch = new TextBox
@@ -84,10 +96,11 @@ namespace CloudFlowExplorer
                 Location = new Point(panelTop.Width - 85, 48)
             };
 
-            panelTop.Controls.AddRange(new Control[] { _lblConnection, _btnLoad, lblSearch, _txtSearch, _btnSearch, _lblFlowCount });
+            panelTop.Controls.AddRange(new Control[] { _lblConnection, _btnLoad, _btnLoadFromSolution, lblSearch, _txtSearch, _btnSearch, _lblFlowCount });
             panelTop.Resize += (s, e) =>
             {
                 _btnLoad.Location = new Point(panelTop.Width - 150, 8);
+                _btnLoadFromSolution.Location = new Point(panelTop.Width - 330, 8);
                 _txtSearch.Width = panelTop.Width - 310;
                 _btnSearch.Location = new Point(panelTop.Width - 160, 43);
                 _lblFlowCount.Location = new Point(panelTop.Width - 85, 48);
@@ -148,6 +161,7 @@ namespace CloudFlowExplorer
 
             bool connected = Service != null;
             _btnLoad.Enabled = connected;
+            _btnLoadFromSolution.Enabled = connected;
             _lblConnection.Text = connected
                 ? $"Connected to: {ConnectionDetail?.OrganizationFriendlyName}"
                 : "Not connected. Use the connection button in the toolbar above to connect.";
@@ -198,6 +212,95 @@ namespace CloudFlowExplorer
                     _gridFlows.DataSource = _displayedFlows;
                     ConfigureGridColumns();
                     _lblFlowCount.Text = $"{_allFlows.Count} flows";
+                }
+            });
+        }
+
+        private void OnLoadFromSolutionClick(object? sender, EventArgs e)
+        {
+            // Guard against re-entrancy, same reasoning as OnLoadClick.
+            if (!_btnLoadFromSolution.Enabled) return;
+
+            if (Service == null)
+            {
+                MessageBox.Show("Please connect to an environment first, using the connection button in the toolbar.",
+                    "Not connected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            ExecuteMethod(LoadSolutionsThenPrompt);
+        }
+
+        private void LoadSolutionsThenPrompt()
+        {
+            _btnLoad.Enabled = false;
+            _btnLoadFromSolution.Enabled = false;
+            var service = Service;
+
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = "Loading solutions...",
+                Work = (worker, args) =>
+                {
+                    args.Result = LoadSolutions(service);
+                },
+                PostWorkCallBack = args =>
+                {
+                    _btnLoad.Enabled = Service != null;
+                    _btnLoadFromSolution.Enabled = Service != null;
+
+                    if (args.Error != null)
+                    {
+                        MessageBox.Show(args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    var solutions = (List<SolutionRecord>)args.Result;
+                    if (solutions.Count == 0)
+                    {
+                        MessageBox.Show("No solutions were found in this environment.", "No solutions",
+                            MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+
+                    using var picker = new SolutionPickerForm(solutions);
+                    if (picker.ShowDialog(this) == DialogResult.OK)
+                    {
+                        LoadFlowsForSolution(picker.SelectedSolutionId, picker.SelectedSolutionName);
+                    }
+                }
+            });
+        }
+
+        private void LoadFlowsForSolution(Guid solutionId, string solutionName)
+        {
+            _btnLoad.Enabled = false;
+            _btnLoadFromSolution.Enabled = false;
+            var service = Service;
+
+            WorkAsync(new WorkAsyncInfo
+            {
+                Message = $"Loading Cloud Flows from solution '{solutionName}'...",
+                Work = (worker, args) =>
+                {
+                    args.Result = LoadCloudFlows(service, solutionId);
+                },
+                PostWorkCallBack = args =>
+                {
+                    _btnLoad.Enabled = Service != null;
+                    _btnLoadFromSolution.Enabled = Service != null;
+
+                    if (args.Error != null)
+                    {
+                        MessageBox.Show(args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+
+                    _allFlows = (List<FlowRecord>)args.Result;
+                    _displayedFlows = new BindingList<FlowRecord>(_allFlows);
+                    _gridFlows.DataSource = _displayedFlows;
+                    ConfigureGridColumns();
+                    _lblFlowCount.Text = $"{_allFlows.Count} flows (solution: {solutionName})";
                 }
             });
         }
@@ -331,7 +434,7 @@ namespace CloudFlowExplorer
         }
 
         // --- Dataverse query ---
-        private static List<FlowRecord> LoadCloudFlows(IOrganizationService service)
+        private static List<FlowRecord> LoadCloudFlows(IOrganizationService service, Guid? solutionId = null)
         {
             var flows = new List<FlowRecord>();
             var query = new QueryExpression("workflow")
@@ -349,8 +452,18 @@ namespace CloudFlowExplorer
                     }
                 },
                 Orders = { new OrderExpression("name", OrderType.Ascending) },
-                PageInfo = new PagingInfo { Count = 5000, PageNumber = 1, ReturnTotalRecordCount = true }
+                PageInfo = new PagingInfo { Count = 5000, PageNumber = 1, ReturnTotalRecordCount = true },
+                // Joining to solutioncomponent can otherwise yield duplicate rows if a
+                // flow is somehow listed more than once as a component of the solution.
+                Distinct = solutionId.HasValue
             };
+
+            if (solutionId.HasValue)
+            {
+                var link = query.AddLink("solutioncomponent", "workflowid", "objectid");
+                link.LinkCriteria.AddCondition("solutionid", ConditionOperator.Equal, solutionId.Value);
+                link.LinkCriteria.AddCondition("componenttype", ConditionOperator.Equal, 29); // Workflow (incl. Cloud Flows)
+            }
 
             EntityCollection results;
             do
@@ -379,6 +492,40 @@ namespace CloudFlowExplorer
             while (results.MoreRecords);
 
             return flows;
+        }
+
+        private static List<SolutionRecord> LoadSolutions(IOrganizationService service)
+        {
+            var solutions = new List<SolutionRecord>();
+            var query = new QueryExpression("solution")
+            {
+                ColumnSet = new ColumnSet("solutionid", "friendlyname", "uniquename", "version", "ismanaged"),
+                Criteria = new FilterExpression
+                {
+                    Conditions =
+                    {
+                        // Hide hidden/internal system solutions (e.g. "Active Solution") that are
+                        // not meant to be managed directly by end users.
+                        new ConditionExpression("isvisible", ConditionOperator.Equal, true)
+                    }
+                },
+                Orders = { new OrderExpression("friendlyname", OrderType.Ascending) }
+            };
+
+            var results = service.RetrieveMultiple(query);
+            foreach (var entity in results.Entities)
+            {
+                solutions.Add(new SolutionRecord
+                {
+                    SolutionId = entity.Id,
+                    FriendlyName = entity.GetAttributeValue<string>("friendlyname") ?? "",
+                    UniqueName = entity.GetAttributeValue<string>("uniquename") ?? "",
+                    Version = entity.GetAttributeValue<string>("version") ?? "",
+                    IsManaged = entity.GetAttributeValue<bool>("ismanaged")
+                });
+            }
+
+            return solutions;
         }
     }
 
