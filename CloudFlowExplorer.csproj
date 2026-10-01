@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Avoid duplicate attributes alongside Properties/AssemblyInfo.cs -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+
+    <AssemblyName>CloudFlowExplorer</AssemblyName>
+    <RootNamespace>CloudFlowExplorer</RootNamespace>
+    <Title>Cloud Flow Explorer</Title>
+    <Version>1.0.0.0</Version>
+    <Authors>ygdev992</Authors>
+    <Company>ygdev992</Company>
+    <Copyright>Copyright (c) ygdev992 2026</Copyright>
+    <Description>Search for a keyword across all Cloud Flow (Power Automate) definitions in a Dataverse environment, with a readable JSON viewer and highlighting.</Description>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+    <!-- Suppress framework folder in package -->
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <!-- NU5100/NU5128: expected for XrmToolBox plugins (DLLs go in Plugins/, not lib/) -->
+    <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>CloudFlowExplorer</PackageId>
+    <PackageProjectUrl>https://github.com/ygdev992/CloudFlowExplorer</PackageProjectUrl>
+    <PackageIcon>icon-128.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>XrmToolBox;Dynamics365;Dataverse;PowerPlatform;PowerAutomate;CloudFlow</PackageTags>
+    <PackageReleaseNotes>Initial public release.</PackageReleaseNotes>
+    <RepositoryUrl>https://github.com/ygdev992/CloudFlowExplorer</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- XrmToolBox plugin infrastructure -->
+    <PackageReference Include="XrmToolBoxPackage" Version="1.2025.7.71" />
+
+    <!-- Connection lib (includes WinForms login control) -->
+    <PackageReference Include="MscrmTools.Xrm.Connection" Version="1.2025.7.63" />
+
+    <!-- Dynamics 365 / Dataverse SDK -->
+    <PackageReference Include="Microsoft.CrmSdk.CoreAssemblies" Version="9.0.2.59" />
+    <PackageReference Include="Microsoft.CrmSdk.XrmTooling.CoreAssembly" Version="9.1.1.65" />
+
+    <PackageReference Include="Newtonsoft.Json" Version="13.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Resources\icon-128.png" Pack="true" PackagePath="\" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <!-- Manually include DLL in Plugins folder without framework subfolder -->
+    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="Plugins\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System.ComponentModel.Composition" />
+  </ItemGroup>
+
+</Project>
