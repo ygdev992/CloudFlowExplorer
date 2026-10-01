@@ -3,6 +3,7 @@ using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Newtonsoft.Json;
 using System.ComponentModel;
+using System.Diagnostics;
 using XrmToolBox.Extensibility;
 
 namespace CloudFlowExplorer
@@ -130,6 +131,7 @@ namespace CloudFlowExplorer
                 RowHeadersVisible = false
             };
             _gridFlows.SelectionChanged += OnFlowSelectionChanged;
+            _gridFlows.CellContentClick += OnGridCellContentClick;
             _gridFlows.DataSource = _displayedFlows;
 
             _txtJsonDetail = new RichTextBox
@@ -431,6 +433,61 @@ namespace CloudFlowExplorer
             { colCreated.HeaderText = "Created On"; colCreated.FillWeight = 11; colCreated.DefaultCellStyle.Format = "yyyy-MM-dd HH:mm"; }
             if (_gridFlows.Columns["ModifiedOn"] is DataGridViewColumn colModified)
             { colModified.HeaderText = "Modified On"; colModified.FillWeight = 11; colModified.DefaultCellStyle.Format = "yyyy-MM-dd HH:mm"; }
+
+            // Data-bound columns are regenerated every time DataSource is reassigned, so this
+            // unbound button column needs to be re-added on every call rather than just once.
+            if (_gridFlows.Columns["OpenFlow"] == null)
+            {
+                var colOpen = new DataGridViewButtonColumn
+                {
+                    Name = "OpenFlow",
+                    HeaderText = "Open Flow",
+                    Text = "Open in browser",
+                    UseColumnTextForButtonValue = true,
+                    FillWeight = 12
+                };
+                _gridFlows.Columns.Add(colOpen);
+            }
+        }
+
+        private void OnGridCellContentClick(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
+            if (_gridFlows.Columns[e.ColumnIndex].Name != "OpenFlow") return;
+
+            if (_gridFlows.Rows[e.RowIndex].DataBoundItem is FlowRecord flow)
+            {
+                OpenFlowInBrowser(flow);
+            }
+        }
+
+        private void OpenFlowInBrowser(FlowRecord flow)
+        {
+            var detail = ConnectionDetail;
+            if (detail == null || string.IsNullOrEmpty(detail.WebApplicationUrl))
+            {
+                MessageBox.Show("Unable to determine the environment URL for the current connection.",
+                    "Cannot open flow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var baseUrl = detail.WebApplicationUrl.TrimEnd('/');
+            if (!baseUrl.EndsWith("/main.aspx", StringComparison.OrdinalIgnoreCase))
+            {
+                baseUrl += "/main.aspx";
+            }
+
+            var url = $"{baseUrl}?pagetype=entityrecord&etn=workflow&id={flow.FlowId}";
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not open the flow in the browser: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         // --- Dataverse query ---
