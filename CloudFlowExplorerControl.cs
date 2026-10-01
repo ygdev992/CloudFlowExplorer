@@ -2,7 +2,6 @@ using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System.ComponentModel;
 using XrmToolBox.Extensibility;
 
@@ -238,26 +237,40 @@ namespace CloudFlowExplorer
         {
             if (_gridFlows.CurrentRow?.DataBoundItem is FlowRecord flow)
             {
-                try
+                if (!string.IsNullOrEmpty(flow.JsonDefinition))
                 {
-                    // Pretty-print JSON
-                    if (!string.IsNullOrEmpty(flow.JsonDefinition))
+                    // The actual formatting call is isolated in its own method so that if the
+                    // host process has a conflicting Newtonsoft.Json assembly loaded (seen in the
+                    // wild as a MissingMethodException that bypasses try/catch when it happens
+                    // inline, because the JIT fails to prepare the containing method), the
+                    // failure surfaces as a normal catchable exception here instead of crashing
+                    // the whole application.
+                    try
                     {
-                        var parsed = JToken.Parse(flow.JsonDefinition);
-                        _txtJsonDetail.Text = parsed.ToString(Formatting.Indented);
+                        _txtJsonDetail.Text = FormatJson(flow.JsonDefinition);
                     }
-                    else
+                    catch
                     {
-                        _txtJsonDetail.Text = "(No JSON definition available)";
+                        _txtJsonDetail.Text = flow.JsonDefinition;
                     }
                 }
-                catch
+                else
                 {
-                    _txtJsonDetail.Text = flow.JsonDefinition ?? "(empty)";
+                    _txtJsonDetail.Text = "(No JSON definition available)";
                 }
 
                 HighlightSearchTerm();
             }
+        }
+
+        // Kept in its own method (never inlined into the caller) so that a JIT-time failure to
+        // resolve a Newtonsoft.Json method (e.g. a conflicting assembly version already loaded by
+        // the XrmToolBox host or another plugin) throws a normal, catchable exception at the call
+        // site instead of corrupting the caller's own try/catch handling.
+        private static string FormatJson(string json)
+        {
+            var parsed = JsonConvert.DeserializeObject(json);
+            return JsonConvert.SerializeObject(parsed, Formatting.Indented);
         }
 
         private void HighlightSearchTerm()
