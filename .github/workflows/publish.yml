@@ -35,4 +35,7 @@ jobs:
           user: ${{ secrets.NUGET_USER }} # your nuget.org profile username, not email
 
       - name: Push to NuGet
-        run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem -Path ./artifacts -Filter *.nupkg | Select-Object -First 1 -ExpandProperty FullName
+          dotnet nuget push $package --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
