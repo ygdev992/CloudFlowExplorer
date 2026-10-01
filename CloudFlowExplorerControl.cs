@@ -16,7 +16,7 @@ namespace CloudFlowExplorer
         private readonly TextBox _txtSearch;
         private readonly Button _btnSearch;
         private readonly DataGridView _gridFlows;
-        private readonly TextBox _txtJsonDetail;
+        private readonly RichTextBox _txtJsonDetail;
         private readonly SplitContainer _splitMain;
         private readonly System.Windows.Forms.Label _lblFlowCount;
         private readonly System.Windows.Forms.Label _lblConnection;
@@ -119,12 +119,12 @@ namespace CloudFlowExplorer
             _gridFlows.SelectionChanged += OnFlowSelectionChanged;
             _gridFlows.DataSource = _displayedFlows;
 
-            _txtJsonDetail = new TextBox
+            _txtJsonDetail = new RichTextBox
             {
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
-                ScrollBars = ScrollBars.Both,
+                ScrollBars = RichTextBoxScrollBars.Both,
                 WordWrap = false,
                 Font = new Font("Cascadia Code", 9f, FontStyle.Regular),
                 BackColor = Color.FromArgb(30, 30, 30),
@@ -275,16 +275,35 @@ namespace CloudFlowExplorer
 
         private void HighlightSearchTerm()
         {
-            // TextBox doesn't support rich highlighting, but we can scroll to the first match
-            var keyword = GetSearchKeyword();
-            if (string.IsNullOrEmpty(keyword) || string.IsNullOrEmpty(_txtJsonDetail.Text)) return;
+            var text = _txtJsonDetail.Text;
 
-            var idx = _txtJsonDetail.Text.IndexOf(keyword, StringComparison.OrdinalIgnoreCase);
-            if (idx >= 0)
+            // Reset any highlighting left over from a previous selection.
+            _txtJsonDetail.SelectAll();
+            _txtJsonDetail.SelectionBackColor = _txtJsonDetail.BackColor;
+            _txtJsonDetail.SelectionColor = _txtJsonDetail.ForeColor;
+            _txtJsonDetail.DeselectAll();
+
+            var keyword = GetSearchKeyword();
+            if (string.IsNullOrEmpty(keyword) || string.IsNullOrEmpty(text)) return;
+
+            bool firstMatch = true;
+            var idx = 0;
+            while ((idx = text.IndexOf(keyword, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
             {
                 _txtJsonDetail.Select(idx, keyword.Length);
-                _txtJsonDetail.ScrollToCaret();
+                _txtJsonDetail.SelectionBackColor = Color.Orange;
+                _txtJsonDetail.SelectionColor = Color.Black;
+
+                if (firstMatch)
+                {
+                    _txtJsonDetail.ScrollToCaret();
+                    firstMatch = false;
+                }
+
+                idx += keyword.Length;
             }
+
+            _txtJsonDetail.DeselectAll();
         }
 
         private void ConfigureGridColumns()
