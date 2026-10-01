@@ -157,20 +157,37 @@ namespace CloudFlowExplorer
 
         private void OnLoadClick(object? sender, EventArgs e)
         {
+            // Guard against re-entrancy: a double-click (or the user clicking again
+            // before the first load finishes) must not start a second overlapping
+            // background operation.
+            if (!_btnLoad.Enabled) return;
+
+            if (Service == null)
+            {
+                MessageBox.Show("Please connect to an environment first, using the connection button in the toolbar.",
+                    "Not connected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
             ExecuteMethod(LoadFlows);
         }
 
         private void LoadFlows()
         {
+            _btnLoad.Enabled = false;
+            var service = Service;
+
             WorkAsync(new WorkAsyncInfo
             {
                 Message = "Loading Cloud Flows...",
                 Work = (worker, args) =>
                 {
-                    args.Result = LoadCloudFlows(Service);
+                    args.Result = LoadCloudFlows(service);
                 },
                 PostWorkCallBack = args =>
                 {
+                    _btnLoad.Enabled = Service != null;
+
                     if (args.Error != null)
                     {
                         MessageBox.Show(args.Error.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
