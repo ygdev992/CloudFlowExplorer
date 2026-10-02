@@ -179,8 +179,7 @@ namespace CloudFlowExplorer
 
             if (Service == null)
             {
-                MessageBox.Show("Please connect to an environment first, using the connection button in the toolbar.",
-                    "Not connected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                RaiseRequestConnectionEvent(new RequestConnectionEventArgs());
                 return;
             }
 
@@ -225,8 +224,7 @@ namespace CloudFlowExplorer
 
             if (Service == null)
             {
-                MessageBox.Show("Please connect to an environment first, using the connection button in the toolbar.",
-                    "Not connected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                RaiseRequestConnectionEvent(new RequestConnectionEventArgs());
                 return;
             }
 
