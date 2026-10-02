@@ -25,16 +25,26 @@
     <!-- NU5100/NU5128: expected for XrmToolBox plugins (DLLs go in Plugins/, not lib/) -->
     <NoWarn>$(NoWarn);NU5100;NU5128</NoWarn>
 
-    <!-- NuGet Package Metadata -->
+    <!-- NuGet Package Metadata (consumed as tokens by CloudFlowExplorer.nuspec via NuspecProperties) -->
     <PackageId>CloudFlowExplorer</PackageId>
     <PackageProjectUrl>https://github.com/ygdev992/CloudFlowExplorer</PackageProjectUrl>
-    <PackageIcon>icon-128.png</PackageIcon>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>XrmToolBox;Dynamics365;Dataverse;PowerPlatform;PowerAutomate;CloudFlow</PackageTags>
+    <!-- Space-separated: nuspec <tags> is space-delimited, and semicolons would break NuspecProperties parsing -->
+    <PackageTags>XrmToolBox Dynamics365 Dataverse PowerPlatform PowerAutomate CloudFlow</PackageTags>
     <PackageReleaseNotes>Initial public release.</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/ygdev992/CloudFlowExplorer</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <!--
+      Use a hand-authored .nuspec so the published package declares only the "XrmToolBox"
+      compatibility dependency expected by the Tool Library, instead of auto-generating one
+      dependency entry per <PackageReference> (XrmToolBoxPackage, CRM SDK, MscrmTools.Xrm.Connection,
+      Newtonsoft.Json). See CloudFlowExplorer.nuspec for details.
+    -->
+    <NuspecFile>CloudFlowExplorer.nuspec</NuspecFile>
+    <NuspecBasePath>$(MSBuildProjectDirectory)</NuspecBasePath>
+    <MinimumXrmToolBoxVersion>1.2025.7.71</MinimumXrmToolBoxVersion>
+    <NuspecProperties>id=$(PackageId);version=$(Version);title=$(Title);authors=$(Authors);description=$(Description);copyright=$(Copyright);tags=$(PackageTags);projecturl=$(PackageProjectUrl);releasenotes=$(PackageReleaseNotes);repourl=$(RepositoryUrl);configuration=$(Configuration);targetframework=$(TargetFramework);assemblyname=$(AssemblyName);xtbversion=$(MinimumXrmToolBoxVersion)</NuspecProperties>
   </PropertyGroup>
 
   <ItemGroup>
@@ -49,13 +59,6 @@
     <PackageReference Include="Microsoft.CrmSdk.XrmTooling.CoreAssembly" Version="9.1.1.65" />
 
     <PackageReference Include="Newtonsoft.Json" Version="13.*" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="Resources\icon-128.png" Pack="true" PackagePath="\" />
-    <None Include="README.md" Pack="true" PackagePath="\" />
-    <!-- Manually include DLL in Plugins folder without framework subfolder -->
-    <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="Plugins\" />
   </ItemGroup>
 
   <ItemGroup>

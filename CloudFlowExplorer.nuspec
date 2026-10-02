@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd">
+  <metadata>
+    <id>$id$</id>
+    <version>$version$</version>
+    <title>$title$</title>
+    <authors>$authors$</authors>
+    <owners>$authors$</owners>
+    <license type="expression">MIT</license>
+    <icon>icon-128.png</icon>
+    <readme>README.md</readme>
+    <projectUrl>$projecturl$</projectUrl>
+    <description>$description$</description>
+    <summary>$description$</summary>
+    <releaseNotes>$releasenotes$</releaseNotes>
+    <copyright>$copyright$</copyright>
+    <tags>$tags$</tags>
+    <repository type="git" url="$repourl$" />
+    <!--
+      XrmToolBox Tool Library reads this dependency (package id "XrmToolBox") to detect
+      compatibility with the installed host version. It is a non-resolvable marker package,
+      not an actual downloadable dependency, so it is declared here manually rather than via
+      a <PackageReference> (which would fail NuGet restore).
+      Do NOT list XrmToolBoxPackage, the CRM SDK packages, MscrmTools.Xrm.Connection or
+      Newtonsoft.Json here: they already ship inside every XrmToolBox installation, and
+      declaring them as package dependencies can cause version conflicts with other tools.
+    -->
+    <dependencies>
+      <group targetFramework="$targetframework$">
+        <dependency id="XrmToolBox" version="$xtbversion$" />
+      </group>
+    </dependencies>
+  </metadata>
+  <files>
+    <file src="bin\$configuration$\$targetframework$\$assemblyname$.dll" target="Plugins\" />
+    <file src="Resources\icon-128.png" target="\" />
+    <file src="README.md" target="\" />
+  </files>
+</package>
