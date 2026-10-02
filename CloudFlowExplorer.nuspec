@@ -7,12 +7,12 @@
     <authors>$authors$</authors>
     <owners>$authors$</owners>
     <license type="expression">MIT</license>
-    <icon>icon-128.png</icon>
     <!--
-      XrmToolBox's registration page validates a direct, image-typed iconUrl. NuGet.org's
-      auto-generated icon endpoint (derived from the embedded <icon>) serves
-      application/octet-stream, which fails that check, so point iconUrl at a raw GitHub
-      asset that serves image/png instead.
+      NuGet.org gives precedence to an embedded <icon> over <iconUrl> and always exposes its
+      own extension-less hosting URL for it (application/octet-stream, no file extension),
+      which fails XrmToolBox's registration page icon URL validation. So we deliberately do
+      NOT declare <icon> here; only <iconUrl>, pointing at a raw GitHub-hosted PNG that NuGet.org
+      will then expose as-is (and that serves a proper image/png content type).
     -->
     <iconUrl>https://raw.githubusercontent.com/ygdev992/CloudFlowExplorer/main/Resources/icon-128.png</iconUrl>
     <readme>README.md</readme>
