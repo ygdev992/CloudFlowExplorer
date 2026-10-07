@@ -61,21 +61,21 @@ namespace CloudFlowExplorer
                 WrapContents = false
             };
 
-            _btnLoad = new Button { Text = "Load Cloud Flows", Width = 150, Height = 28, Enabled = false, Margin = new Padding(0, 0, 6, 0) };
+            _btnLoad = new Button { Text = "Load Cloud Flows", Width = 180, Height = 30, Enabled = false, Margin = new Padding(0, 0, 8, 0) };
             _btnLoad.Click += OnLoadClick;
+            ApplyButtonGlyph(_btnLoad, "\uE753", AccentColor);
 
-            _btnLoadFromSolution = new Button { Text = "Load Flows from Solution", Width = 170, Height = 28, Enabled = false, Margin = new Padding(0, 0, 10, 0) };
+            _btnLoadFromSolution = new Button { Text = "Load Flows from Solution", Width = 210, Height = 30, Enabled = false, Margin = new Padding(0, 0, 8, 0) };
             _btnLoadFromSolution.Click += OnLoadFromSolutionClick;
+            ApplyButtonGlyph(_btnLoadFromSolution, "\uE8B7", AccentColor);
 
-            _btnExportExcel = new Button { Text = "Export to Excel", Width = 130, Height = 28, Enabled = false };
+            _btnExportExcel = new Button { Text = "Export to Excel", Width = 160, Height = 30, Enabled = false, Margin = new Padding(0, 0, 0, 0) };
             _btnExportExcel.Click += OnExportExcelClick;
+            ApplyButtonGlyph(_btnExportExcel, "\uE74E", Color.FromArgb(33, 115, 70));
 
-            panelActionsLeft.Controls.AddRange(new Control[]
-            {
-                CreateIconLabel("\uE753", AccentColor), _btnLoad,
-                CreateIconLabel("\uE8B7", AccentColor), _btnLoadFromSolution,
-                CreateIconLabel("\uE74E", Color.FromArgb(33, 115, 70)), _btnExportExcel
-            });
+            // The glyph is now rendered as the button's own image (see ApplyButtonGlyph), so each
+            // icon is unambiguously tied to its command instead of floating next to the button.
+            panelActionsLeft.Controls.AddRange(new Control[] { _btnLoad, _btnLoadFromSolution, _btnExportExcel });
 
             var panelConnectionRight = new FlowLayoutPanel
             {
@@ -129,8 +129,10 @@ namespace CloudFlowExplorer
             panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-            var iconSearch = CreateIconLabel("\uE721", AccentColor);
             var lblSearch = new System.Windows.Forms.Label { Text = "Search keyword:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 9, 8, 0) };
+            // The icon is boxed to the label's own height/top-margin so its glyph centers on the
+            // same line as the label text instead of floating a couple of pixels off.
+            var iconSearch = CreateIconLabel("\uE721", AccentColor, lblSearch.Height, lblSearch.Margin.Top);
 
             _txtSearch = new TextBox
             {
@@ -151,8 +153,7 @@ namespace CloudFlowExplorer
                 Margin = new Padding(0, 6, 10, 0)
             };
             var toolTip = new ToolTip();
-            toolTip.SetToolTip(_chkExactMatch, "Match the exact word only (e.g. \"EM\" will not match \"EMEA\").");
-            _chkExactMatch.CheckedChanged += (s, e) => { if (_allFlows.Count > 0) OnSearchClick(s, EventArgs.Empty); };
+            toolTip.SetToolTip(_chkExactMatch, "Match the exact word only (e.g. \"cat\" will not match \"category\").");
 
             _btnSearch = new Button { Text = "Search", Width = 70, Height = 28, Margin = new Padding(0, 2, 10, 0) };
             _btnSearch.Click += OnSearchClick;
@@ -259,19 +260,109 @@ namespace CloudFlowExplorer
             Controls.Add(panelTop);
         }
 
-        private static System.Windows.Forms.Label CreateIconLabel(string glyph, Color color, int size = 14)
+        /// <summary>
+        /// Creates a square icon glyph label. When <paramref name="matchHeight"/>/<paramref name="matchMarginTop"/>
+        /// are supplied, the label's box is sized to match a companion control (button or text label) so the
+        /// glyph's vertical center lines up with it, instead of relying on independently-guessed margins.
+        /// </summary>
+        private static System.Windows.Forms.Label CreateIconLabel(string glyph, Color color, int? matchHeight = null, int? matchMarginTop = null, int size = 14)
         {
+            int height = matchHeight ?? size + 12;
+            int marginTop = matchMarginTop ?? 2;
             return new System.Windows.Forms.Label
             {
                 Text = glyph,
                 Font = new Font("Segoe MDL2 Assets", size, FontStyle.Regular),
                 AutoSize = false,
                 Width = size + 12,
-                Height = size + 12,
+                Height = height,
                 TextAlign = ContentAlignment.MiddleCenter,
                 ForeColor = color,
-                Margin = new Padding(0, 2, 2, 0)
+                Margin = new Padding(0, marginTop, 2, 0)
             };
+        }
+
+        /// <summary>
+        /// Renders a Segoe MDL2 Assets glyph into the button's own <see cref="Button.Image"/> (left-aligned),
+        /// so the icon is unmistakably part of that one command instead of sitting in an adjacent label that
+        /// could be read as belonging to either neighbor.
+        /// </summary>
+        private static void ApplyButtonGlyph(Button button, string glyph, Color color, int size = 16)
+        {
+            int boxSize = size + 4;
+            const int gapAfterIcon = 8;
+            button.Image = CreateCenteredGlyphBitmap(glyph, color, size, boxSize, gapAfterIcon);
+            button.ImageAlign = ContentAlignment.MiddleLeft;
+            button.TextAlign = ContentAlignment.MiddleCenter;
+            button.TextImageRelation = TextImageRelation.ImageBeforeText;
+            button.Padding = new Padding(10, 0, 4, 0);
+        }
+
+        /// <summary>
+        /// Renders an icon-font glyph into a fixed-size bitmap, centered on its actual visible ink
+        /// rather than the font's nominal character cell. Segoe MDL2 Assets glyphs (cloud, folder,
+        /// save, etc.) each carry different internal padding by design, so centering on the cell
+        /// (via DrawString/TextRenderer alone) places different icons at different visual heights.
+        /// Measuring the real painted pixels and re-centering those removes that inconsistency.
+        /// The ink is also scaled down (preserving aspect ratio) if it would otherwise overflow the
+        /// box - some glyphs (e.g. the cloud icon) are noticeably wider than the nominal font cell.
+        /// An extra transparent strip (<paramref name="gapAfterIcon"/>) is appended to the right of
+        /// the icon so the button's text doesn't crowd it.
+        /// </summary>
+        private static Bitmap CreateCenteredGlyphBitmap(string glyph, Color color, int fontSize, int boxSize, int gapAfterIcon = 0)
+        {
+            // Render oversized on a scratch canvas first so the glyph has room to spill outside a
+            // tight box before we measure and re-center its actual ink.
+            int scratchSize = boxSize * 3;
+            using var scratch = new Bitmap(scratchSize, scratchSize);
+            using (var g = Graphics.FromImage(scratch))
+            using (var font = new Font("Segoe MDL2 Assets", fontSize, FontStyle.Regular))
+            {
+                g.Clear(Color.Transparent);
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                TextRenderer.DrawText(g, glyph, font, new Rectangle(0, 0, scratchSize, scratchSize), color,
+                    Color.Transparent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            }
+
+            Rectangle ink = FindInkBounds(scratch);
+            var result = new Bitmap(boxSize + gapAfterIcon, boxSize);
+            using (var g = Graphics.FromImage(result))
+            {
+                g.Clear(Color.Transparent);
+                if (ink.Width > 0 && ink.Height > 0)
+                {
+                    float scale = Math.Min(1f, Math.Min((float)boxSize / ink.Width, (float)boxSize / ink.Height));
+                    int destWidth = (int)Math.Round(ink.Width * scale);
+                    int destHeight = (int)Math.Round(ink.Height * scale);
+                    int destX = (boxSize - destWidth) / 2;
+                    int destY = (boxSize - destHeight) / 2;
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(scratch, new Rectangle(destX, destY, destWidth, destHeight), ink, GraphicsUnit.Pixel);
+                }
+            }
+            return result;
+        }
+
+        private static Rectangle FindInkBounds(Bitmap bmp)
+        {
+            int minX = bmp.Width, minY = bmp.Height, maxX = -1, maxY = -1;
+            for (int y = 0; y < bmp.Height; y++)
+            {
+                for (int x = 0; x < bmp.Width; x++)
+                {
+                    if (bmp.GetPixel(x, y).A > 15)
+                    {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            return maxX < minX || maxY < minY
+                ? Rectangle.Empty
+                : Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
         }
 
         /// <summary>
@@ -662,16 +753,32 @@ namespace CloudFlowExplorer
 
         private void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
         {
-            if (_gridFlows.Columns[e.ColumnIndex].Name != "StatusDisplay") return;
+            var columnName = _gridFlows.Columns[e.ColumnIndex].Name;
 
-            e.CellStyle.ForeColor = (e.Value as string) switch
+            if (columnName == "StatusDisplay")
             {
-                "Activated" => Color.FromArgb(16, 124, 16),
-                "Suspended" => Color.FromArgb(196, 43, 28),
-                "Draft" => Color.DimGray,
-                _ => _gridFlows.DefaultCellStyle.ForeColor
-            };
-            e.CellStyle.Font = new Font(_gridFlows.Font, FontStyle.Bold);
+                e.CellStyle.ForeColor = (e.Value as string) switch
+                {
+                    "Activated" => Color.FromArgb(16, 124, 16),
+                    "Suspended" => Color.FromArgb(196, 43, 28),
+                    "Draft" => Color.DimGray,
+                    _ => _gridFlows.DefaultCellStyle.ForeColor
+                };
+                e.CellStyle.Font = new Font(_gridFlows.Font, FontStyle.Bold);
+                return;
+            }
+
+            if (columnName == "OpenFlow" &&
+                _gridFlows.Rows[e.RowIndex].Cells[e.ColumnIndex] is DataGridViewLinkCell linkCell)
+            {
+                // The link's own text color (not CellStyle.ForeColor) is what DataGridViewLinkCell
+                // paints with, so on a selected row - whose background becomes the same blue as the
+                // link - the link color must switch to white or it reads as invisible.
+                bool selected = _gridFlows.Rows[e.RowIndex].Selected;
+                linkCell.LinkColor = selected ? Color.White : AccentColor;
+                linkCell.ActiveLinkColor = selected ? Color.White : Color.FromArgb(0, 71, 171);
+                linkCell.VisitedLinkColor = selected ? Color.White : AccentColor;
+            }
         }
 
         private void OnGridCellContentClick(object? sender, DataGridViewCellEventArgs e)
@@ -744,7 +851,11 @@ namespace CloudFlowExplorer
         private void OpenFlowInBrowser(FlowRecord flow)
         {
             var detail = ConnectionDetail;
-            var environmentId = detail?.EnvironmentId;
+            // ConnectionDetail.EnvironmentId is only a UI "environment highlighting" label, not the
+            // real Power Platform environment GUID. The actual environment id is exposed by the
+            // underlying CrmServiceClient (and, through it, the Dataverse OrganizationDetail).
+            var environmentId = detail?.ServiceClient?.EnvironmentId
+                ?? detail?.GetCrmServiceClient()?.EnvironmentId;
             if (detail == null || string.IsNullOrEmpty(environmentId))
             {
                 MessageBox.Show("Unable to determine the Power Platform environment for the current connection.",
@@ -752,9 +863,10 @@ namespace CloudFlowExplorer
                 return;
             }
 
-            // Opens the flow directly in the Power Automate designer (editable), instead of the
-            // read-only Dynamics "workflow" table record previously reached through main.aspx.
-            var url = $"https://make.powerautomate.com/environments/{environmentId}/flows/{flow.FlowId}/edit";
+            // Opens the flow's details page in Power Automate. The "/flows/{id}/edit" shorthand
+            // (without a solution context) does not resolve to the flow and silently redirects to
+            // the home page; the "solutions/~preferred" segment is required for a direct deep link.
+            var url = $"https://make.powerautomate.com/environments/{environmentId}/solutions/~preferred/flows/{flow.FlowId}/details";
 
             try
             {
