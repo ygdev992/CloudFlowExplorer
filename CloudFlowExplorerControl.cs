@@ -1,9 +1,11 @@
+using ClosedXML.Excel;
 using McTools.Xrm.Connection;
 using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Query;
 using Newtonsoft.Json;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using XrmToolBox.Extensibility;
 
 namespace CloudFlowExplorer
@@ -12,100 +14,167 @@ namespace CloudFlowExplorer
     {
         private const string SearchPlaceholder = "Enter a keyword to search in the flow definition...";
 
+        private static readonly Color AccentColor = Color.FromArgb(0, 120, 212);
+        private static readonly Color MatchColor = Color.FromArgb(255, 213, 128);
+        private static readonly Color CurrentMatchColor = Color.FromArgb(255, 140, 0);
+
         // Controls
         private readonly Button _btnLoad;
         private readonly Button _btnLoadFromSolution;
+        private readonly Button _btnExportExcel;
         private readonly TextBox _txtSearch;
         private readonly Button _btnSearch;
+        private readonly CheckBox _chkExactMatch;
         private readonly DataGridView _gridFlows;
         private readonly RichTextBox _txtJsonDetail;
         private readonly SplitContainer _splitMain;
         private readonly System.Windows.Forms.Label _lblFlowCount;
-        private readonly System.Windows.Forms.Label _lblConnection;
+        private readonly System.Windows.Forms.Label _lblConnectionDot;
+        private readonly System.Windows.Forms.Label _lblConnectionPrefix;
+        private readonly System.Windows.Forms.Label _lblConnectionValue;
+        private readonly System.Windows.Forms.Label _lblOccurrenceCount;
+        private readonly Button _btnPrevMatch;
+        private readonly Button _btnNextMatch;
 
         // Data
         private List<FlowRecord> _allFlows = new();
         private BindingList<FlowRecord> _displayedFlows = new();
+        private List<int> _jsonMatchPositions = new();
+        private int _currentMatchIndex = -1;
 
         public CloudFlowExplorerControl()
         {
             Dock = DockStyle.Fill;
             Font = new Font("Segoe UI", 9f);
 
-            // --- Top panel: connection status + actions ---
-            var panelTop = new Panel { Dock = DockStyle.Top, Height = 80, Padding = new Padding(10, 10, 10, 5) };
+            // --- Top panel: actions (left), connection status (right), search row below ---
+            var panelTop = new Panel { Dock = DockStyle.Top, Height = 84, Padding = new Padding(10, 8, 10, 6) };
 
-            _lblConnection = new System.Windows.Forms.Label
+            // Row 1: action buttons on the left, connection status on the right.
+            var rowActions = new Panel { Dock = DockStyle.Top, Height = 34 };
+
+            var panelActionsLeft = new FlowLayoutPanel
             {
-                Text = "Not connected. Use the connection button in the toolbar above to connect.",
+                Dock = DockStyle.Left,
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false
+            };
+
+            _btnLoad = new Button { Text = "Load Cloud Flows", Width = 180, Height = 30, Enabled = false, Margin = new Padding(0, 0, 8, 0) };
+            _btnLoad.Click += OnLoadClick;
+            ApplyButtonGlyph(_btnLoad, "\uE753", AccentColor);
+
+            _btnLoadFromSolution = new Button { Text = "Load Flows from Solution", Width = 210, Height = 30, Enabled = false, Margin = new Padding(0, 0, 8, 0) };
+            _btnLoadFromSolution.Click += OnLoadFromSolutionClick;
+            ApplyButtonGlyph(_btnLoadFromSolution, "\uE8B7", AccentColor);
+
+            _btnExportExcel = new Button { Text = "Export to Excel", Width = 160, Height = 30, Enabled = false, Margin = new Padding(0, 0, 0, 0) };
+            _btnExportExcel.Click += OnExportExcelClick;
+            ApplyButtonGlyph(_btnExportExcel, "\uE74E", Color.FromArgb(33, 115, 70));
+
+            // The glyph is now rendered as the button's own image (see ApplyButtonGlyph), so each
+            // icon is unambiguously tied to its command instead of floating next to the button.
+            panelActionsLeft.Controls.AddRange(new Control[] { _btnLoad, _btnLoadFromSolution, _btnExportExcel });
+
+            var panelConnectionRight = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Right,
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right
+            };
+
+            _lblConnectionDot = new System.Windows.Forms.Label
+            {
+                Text = "\u25CF",
+                AutoSize = true,
+                ForeColor = Color.Silver,
+                Margin = new Padding(0, 6, 4, 0)
+            };
+            _lblConnectionPrefix = new System.Windows.Forms.Label
+            {
+                Text = "Not connected.",
                 AutoSize = true,
                 ForeColor = Color.Gray,
-                Location = new Point(10, 14)
+                Margin = new Padding(0, 7, 4, 0)
             };
-
-            _btnLoad = new Button
+            _lblConnectionValue = new System.Windows.Forms.Label
             {
-                Text = "Load Cloud Flows",
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(panelTop.Width - 150, 8),
-                Width = 140,
-                Height = 28,
-                Enabled = false
+                Text = "",
+                AutoSize = true,
+                Font = new Font(Font, FontStyle.Bold),
+                ForeColor = Color.Black,
+                Margin = new Padding(0, 7, 0, 0)
             };
-            _btnLoad.Click += OnLoadClick;
+            panelConnectionRight.Controls.AddRange(new Control[] { _lblConnectionDot, _lblConnectionPrefix, _lblConnectionValue });
 
-            _btnLoadFromSolution = new Button
+            rowActions.Controls.Add(panelConnectionRight);
+            rowActions.Controls.Add(panelActionsLeft);
+
+            // Row 2: search bar.
+            var rowSearch = new Panel { Dock = DockStyle.Top, Height = 34 };
+
+            var panelSearch = new TableLayoutPanel
             {
-                Text = "Load Flows from Solution",
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(panelTop.Width - 330, 8),
-                Width = 170,
-                Height = 28,
-                Enabled = false
+                Dock = DockStyle.Fill,
+                ColumnCount = 6,
+                RowCount = 1
             };
-            _btnLoadFromSolution.Click += OnLoadFromSolutionClick;
+            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
-            // Search row
-            var lblSearch = new System.Windows.Forms.Label { Text = "Search in JSON:", AutoSize = true, Location = new Point(10, 48) };
+            var lblSearch = new System.Windows.Forms.Label { Text = "Search keyword:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 9, 8, 0) };
+            // The icon is boxed to the label's own height/top-margin so its glyph centers on the
+            // same line as the label text instead of floating a couple of pixels off.
+            var iconSearch = CreateIconLabel("\uE721", AccentColor, lblSearch.Height, lblSearch.Margin.Top);
+
             _txtSearch = new TextBox
             {
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                Location = new Point(120, 45),
-                Width = panelTop.Width - 310,
+                Dock = DockStyle.Fill,
                 ForeColor = Color.Gray,
-                Text = SearchPlaceholder
+                Text = SearchPlaceholder,
+                Margin = new Padding(0, 4, 10, 0)
             };
             _txtSearch.Enter += (s, e) => { if (_txtSearch.Text == SearchPlaceholder) { _txtSearch.Text = ""; _txtSearch.ForeColor = SystemColors.WindowText; } };
             _txtSearch.Leave += (s, e) => { if (string.IsNullOrWhiteSpace(_txtSearch.Text)) { _txtSearch.Text = SearchPlaceholder; _txtSearch.ForeColor = Color.Gray; } };
             _txtSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { OnSearchClick(s, e); e.SuppressKeyPress = true; } };
 
-            _btnSearch = new Button
+            _chkExactMatch = new CheckBox
             {
-                Text = "Search",
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(panelTop.Width - 160, 43),
-                Width = 70,
-                Height = 28
+                Text = "Whole word",
+                AutoSize = true,
+                Anchor = AnchorStyles.Left,
+                Margin = new Padding(0, 6, 10, 0)
             };
+            var toolTip = new ToolTip();
+            toolTip.SetToolTip(_chkExactMatch, "Match the exact word only (e.g. \"cat\" will not match \"category\").");
+
+            _btnSearch = new Button { Text = "Search", Width = 70, Height = 28, Margin = new Padding(0, 2, 10, 0) };
             _btnSearch.Click += OnSearchClick;
 
-            _lblFlowCount = new System.Windows.Forms.Label
-            {
-                Text = "",
-                AutoSize = true,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Location = new Point(panelTop.Width - 85, 48)
-            };
+            _lblFlowCount = new System.Windows.Forms.Label { Text = "", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 9, 0, 0) };
 
-            panelTop.Controls.AddRange(new Control[] { _lblConnection, _btnLoad, _btnLoadFromSolution, lblSearch, _txtSearch, _btnSearch, _lblFlowCount });
-            panelTop.Resize += (s, e) =>
-            {
-                _btnLoad.Location = new Point(panelTop.Width - 150, 8);
-                _btnLoadFromSolution.Location = new Point(panelTop.Width - 330, 8);
-                _txtSearch.Width = panelTop.Width - 310;
-                _btnSearch.Location = new Point(panelTop.Width - 160, 43);
-                _lblFlowCount.Location = new Point(panelTop.Width - 85, 48);
-            };
+            // Icon + label are grouped in a nested panel so they occupy a single
+            // TableLayoutPanel column/cell together.
+            var searchLabelGroup = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0) };
+            searchLabelGroup.Controls.AddRange(new Control[] { iconSearch, lblSearch });
+
+            panelSearch.Controls.Add(searchLabelGroup, 0, 0);
+            panelSearch.Controls.Add(_txtSearch, 2, 0);
+            panelSearch.Controls.Add(_chkExactMatch, 3, 0);
+            panelSearch.Controls.Add(_btnSearch, 4, 0);
+            panelSearch.Controls.Add(_lblFlowCount, 5, 0);
+
+            rowSearch.Controls.Add(panelSearch);
+
+            panelTop.Controls.Add(rowSearch);
+            panelTop.Controls.Add(rowActions);
 
             // --- Split container: grid + JSON viewer ---
             _splitMain = new SplitContainer
@@ -128,11 +197,47 @@ namespace CloudFlowExplorer
                 MultiSelect = false,
                 BackgroundColor = SystemColors.Window,
                 BorderStyle = BorderStyle.None,
-                RowHeadersVisible = false
+                RowHeadersVisible = false,
+                EnableHeadersVisualStyles = false,
+                GridColor = Color.FromArgb(230, 230, 230)
             };
+            _gridFlows.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(243, 243, 243);
+            _gridFlows.ColumnHeadersDefaultCellStyle.ForeColor = Color.Black;
+            _gridFlows.ColumnHeadersDefaultCellStyle.Font = new Font(Font, FontStyle.Bold);
+            _gridFlows.ColumnHeadersHeight = 32;
+            _gridFlows.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 249, 249);
             _gridFlows.SelectionChanged += OnFlowSelectionChanged;
             _gridFlows.CellContentClick += OnGridCellContentClick;
+            _gridFlows.CellFormatting += OnGridCellFormatting;
             _gridFlows.DataSource = _displayedFlows;
+
+            // --- JSON viewer with an occurrence navigator above it ---
+            var panelJsonHeader = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = Color.FromArgb(245, 245, 245) };
+
+            var panelOccurrenceNav = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Right,
+                AutoSize = true,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false
+            };
+
+            _btnPrevMatch = new Button { Text = "\u25C0", Width = 26, Height = 24, Enabled = false, Margin = new Padding(0, 3, 4, 0) };
+            _btnPrevMatch.Click += (s, e) => MoveMatch(-1);
+
+            _btnNextMatch = new Button { Text = "\u25B6", Width = 26, Height = 24, Enabled = false, Margin = new Padding(0, 3, 10, 0) };
+            _btnNextMatch.Click += (s, e) => MoveMatch(1);
+
+            _lblOccurrenceCount = new System.Windows.Forms.Label
+            {
+                Text = "No search term",
+                AutoSize = true,
+                ForeColor = Color.DimGray,
+                Margin = new Padding(0, 8, 10, 0)
+            };
+
+            panelOccurrenceNav.Controls.AddRange(new Control[] { _lblOccurrenceCount, _btnPrevMatch, _btnNextMatch });
+            panelJsonHeader.Controls.Add(panelOccurrenceNav);
 
             _txtJsonDetail = new RichTextBox
             {
@@ -148,10 +253,116 @@ namespace CloudFlowExplorer
 
             _splitMain.Panel1.Controls.Add(_gridFlows);
             _splitMain.Panel2.Controls.Add(_txtJsonDetail);
+            _splitMain.Panel2.Controls.Add(panelJsonHeader);
 
             // --- Assemble ---
             Controls.Add(_splitMain);
             Controls.Add(panelTop);
+        }
+
+        /// <summary>
+        /// Creates a square icon glyph label. When <paramref name="matchHeight"/>/<paramref name="matchMarginTop"/>
+        /// are supplied, the label's box is sized to match a companion control (button or text label) so the
+        /// glyph's vertical center lines up with it, instead of relying on independently-guessed margins.
+        /// </summary>
+        private static System.Windows.Forms.Label CreateIconLabel(string glyph, Color color, int? matchHeight = null, int? matchMarginTop = null, int size = 14)
+        {
+            int height = matchHeight ?? size + 12;
+            int marginTop = matchMarginTop ?? 2;
+            return new System.Windows.Forms.Label
+            {
+                Text = glyph,
+                Font = new Font("Segoe MDL2 Assets", size, FontStyle.Regular),
+                AutoSize = false,
+                Width = size + 12,
+                Height = height,
+                TextAlign = ContentAlignment.MiddleCenter,
+                ForeColor = color,
+                Margin = new Padding(0, marginTop, 2, 0)
+            };
+        }
+
+        /// <summary>
+        /// Renders a Segoe MDL2 Assets glyph into the button's own <see cref="Button.Image"/> (left-aligned),
+        /// so the icon is unmistakably part of that one command instead of sitting in an adjacent label that
+        /// could be read as belonging to either neighbor.
+        /// </summary>
+        private static void ApplyButtonGlyph(Button button, string glyph, Color color, int size = 16)
+        {
+            int boxSize = size + 4;
+            const int gapAfterIcon = 8;
+            button.Image = CreateCenteredGlyphBitmap(glyph, color, size, boxSize, gapAfterIcon);
+            button.ImageAlign = ContentAlignment.MiddleLeft;
+            button.TextAlign = ContentAlignment.MiddleCenter;
+            button.TextImageRelation = TextImageRelation.ImageBeforeText;
+            button.Padding = new Padding(10, 0, 4, 0);
+        }
+
+        /// <summary>
+        /// Renders an icon-font glyph into a fixed-size bitmap, centered on its actual visible ink
+        /// rather than the font's nominal character cell. Segoe MDL2 Assets glyphs (cloud, folder,
+        /// save, etc.) each carry different internal padding by design, so centering on the cell
+        /// (via DrawString/TextRenderer alone) places different icons at different visual heights.
+        /// Measuring the real painted pixels and re-centering those removes that inconsistency.
+        /// The ink is also scaled down (preserving aspect ratio) if it would otherwise overflow the
+        /// box - some glyphs (e.g. the cloud icon) are noticeably wider than the nominal font cell.
+        /// An extra transparent strip (<paramref name="gapAfterIcon"/>) is appended to the right of
+        /// the icon so the button's text doesn't crowd it.
+        /// </summary>
+        private static Bitmap CreateCenteredGlyphBitmap(string glyph, Color color, int fontSize, int boxSize, int gapAfterIcon = 0)
+        {
+            // Render oversized on a scratch canvas first so the glyph has room to spill outside a
+            // tight box before we measure and re-center its actual ink.
+            int scratchSize = boxSize * 3;
+            using var scratch = new Bitmap(scratchSize, scratchSize);
+            using (var g = Graphics.FromImage(scratch))
+            using (var font = new Font("Segoe MDL2 Assets", fontSize, FontStyle.Regular))
+            {
+                g.Clear(Color.Transparent);
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                TextRenderer.DrawText(g, glyph, font, new Rectangle(0, 0, scratchSize, scratchSize), color,
+                    Color.Transparent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+            }
+
+            Rectangle ink = FindInkBounds(scratch);
+            var result = new Bitmap(boxSize + gapAfterIcon, boxSize);
+            using (var g = Graphics.FromImage(result))
+            {
+                g.Clear(Color.Transparent);
+                if (ink.Width > 0 && ink.Height > 0)
+                {
+                    float scale = Math.Min(1f, Math.Min((float)boxSize / ink.Width, (float)boxSize / ink.Height));
+                    int destWidth = (int)Math.Round(ink.Width * scale);
+                    int destHeight = (int)Math.Round(ink.Height * scale);
+                    int destX = (boxSize - destWidth) / 2;
+                    int destY = (boxSize - destHeight) / 2;
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(scratch, new Rectangle(destX, destY, destWidth, destHeight), ink, GraphicsUnit.Pixel);
+                }
+            }
+            return result;
+        }
+
+        private static Rectangle FindInkBounds(Bitmap bmp)
+        {
+            int minX = bmp.Width, minY = bmp.Height, maxX = -1, maxY = -1;
+            for (int y = 0; y < bmp.Height; y++)
+            {
+                for (int x = 0; x < bmp.Width; x++)
+                {
+                    if (bmp.GetPixel(x, y).A > 15)
+                    {
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+
+            return maxX < minX || maxY < minY
+                ? Rectangle.Empty
+                : Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
         }
 
         /// <summary>
@@ -164,10 +375,16 @@ namespace CloudFlowExplorer
             bool connected = Service != null;
             _btnLoad.Enabled = connected;
             _btnLoadFromSolution.Enabled = connected;
-            _lblConnection.Text = connected
-                ? $"Connected to: {ConnectionDetail?.OrganizationFriendlyName}"
-                : "Not connected. Use the connection button in the toolbar above to connect.";
-            _lblConnection.ForeColor = connected ? Color.Black : Color.Gray;
+            _btnExportExcel.Enabled = connected && _displayedFlows.Count > 0;
+
+            _lblConnectionDot.ForeColor = connected ? Color.FromArgb(16, 124, 16) : Color.Silver;
+            _lblConnectionPrefix.Text = connected ? "Connected to:" : "Not connected.";
+            _lblConnectionPrefix.ForeColor = connected ? Color.Black : Color.Gray;
+            _lblConnectionValue.Text = connected
+                ? ConnectionDetail?.OrganizationFriendlyName ?? ""
+                : "Use the connection button in the toolbar above to connect.";
+            _lblConnectionValue.Font = new Font(Font, connected ? FontStyle.Bold : FontStyle.Regular);
+            _lblConnectionValue.ForeColor = connected ? Color.Black : Color.Gray;
         }
 
         private void OnLoadClick(object? sender, EventArgs e)
@@ -213,6 +430,7 @@ namespace CloudFlowExplorer
                     _gridFlows.DataSource = _displayedFlows;
                     ConfigureGridColumns();
                     _lblFlowCount.Text = $"{_allFlows.Count} flows";
+                    _btnExportExcel.Enabled = Service != null && _allFlows.Count > 0;
                 }
             });
         }
@@ -301,6 +519,7 @@ namespace CloudFlowExplorer
                     _gridFlows.DataSource = _displayedFlows;
                     ConfigureGridColumns();
                     _lblFlowCount.Text = $"{_allFlows.Count} flows (solution: {solutionName})";
+                    _btnExportExcel.Enabled = Service != null && _allFlows.Count > 0;
                 }
             });
         }
@@ -316,6 +535,7 @@ namespace CloudFlowExplorer
             var keyword = GetSearchKeyword();
             if (_allFlows.Count == 0) return;
 
+            bool exact = _chkExactMatch.Checked;
             List<FlowRecord> filtered;
             if (string.IsNullOrEmpty(keyword))
             {
@@ -324,16 +544,54 @@ namespace CloudFlowExplorer
             else
             {
                 filtered = _allFlows
-                    .Where(f => (f.JsonDefinition ?? "").IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0
-                             || (f.Name ?? "").IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0
-                             || (f.Description ?? "").IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    .Where(f => HasMatch(f.JsonDefinition, keyword, exact)
+                             || HasMatch(f.Name, keyword, exact)
+                             || HasMatch(f.Description, keyword, exact))
                     .ToList();
             }
 
             _displayedFlows = new BindingList<FlowRecord>(filtered);
             _gridFlows.DataSource = _displayedFlows;
             ConfigureGridColumns();
-            _lblFlowCount.Text = $"{filtered.Count}/{_allFlows.Count}";
+            _lblFlowCount.Text = $"{filtered.Count}/{_allFlows.Count} flows";
+
+            // The keyword (or match mode) may have changed, so refresh the occurrence
+            // navigator for whichever flow is currently selected.
+            RefreshJsonHighlighting();
+        }
+
+        private static bool HasMatch(string? text, string keyword, bool exactWord)
+        {
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keyword)) return false;
+
+            if (exactWord)
+                return Regex.IsMatch(text!, $@"\b{Regex.Escape(keyword)}\b", RegexOptions.IgnoreCase);
+
+            return text!.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private static List<int> FindMatchPositions(string text, string keyword, bool exactWord)
+        {
+            var positions = new List<int>();
+            if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keyword)) return positions;
+
+            if (exactWord)
+            {
+                var pattern = $@"\b{Regex.Escape(keyword)}\b";
+                foreach (Match m in Regex.Matches(text, pattern, RegexOptions.IgnoreCase))
+                    positions.Add(m.Index);
+            }
+            else
+            {
+                var idx = 0;
+                while ((idx = text.IndexOf(keyword, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+                {
+                    positions.Add(idx);
+                    idx += keyword.Length;
+                }
+            }
+
+            return positions;
         }
 
         private void OnFlowSelectionChanged(object? sender, EventArgs e)
@@ -362,7 +620,7 @@ namespace CloudFlowExplorer
                     _txtJsonDetail.Text = "(No JSON definition available)";
                 }
 
-                HighlightSearchTerm();
+                RefreshJsonHighlighting();
             }
         }
 
@@ -376,7 +634,12 @@ namespace CloudFlowExplorer
             return JsonConvert.SerializeObject(parsed, Formatting.Indented);
         }
 
-        private void HighlightSearchTerm()
+        /// <summary>
+        /// Recomputes every occurrence of the current keyword in the JSON viewer, highlights
+        /// them all, and resets the occurrence navigator (count + current position) to the
+        /// first match.
+        /// </summary>
+        private void RefreshJsonHighlighting()
         {
             var text = _txtJsonDetail.Text;
 
@@ -387,26 +650,63 @@ namespace CloudFlowExplorer
             _txtJsonDetail.DeselectAll();
 
             var keyword = GetSearchKeyword();
-            if (string.IsNullOrEmpty(keyword) || string.IsNullOrEmpty(text)) return;
+            _jsonMatchPositions = FindMatchPositions(text ?? "", keyword, _chkExactMatch.Checked);
+            _currentMatchIndex = _jsonMatchPositions.Count > 0 ? 0 : -1;
 
-            bool firstMatch = true;
-            var idx = 0;
-            while ((idx = text.IndexOf(keyword, idx, StringComparison.OrdinalIgnoreCase)) >= 0)
+            for (int i = 0; i < _jsonMatchPositions.Count; i++)
             {
-                _txtJsonDetail.Select(idx, keyword.Length);
-                _txtJsonDetail.SelectionBackColor = Color.Orange;
-                _txtJsonDetail.SelectionColor = Color.Black;
+                ApplyMatchStyle(i, isCurrent: i == _currentMatchIndex);
+            }
 
-                if (firstMatch)
-                {
-                    _txtJsonDetail.ScrollToCaret();
-                    firstMatch = false;
-                }
-
-                idx += keyword.Length;
+            if (_currentMatchIndex >= 0)
+            {
+                _txtJsonDetail.Select(_jsonMatchPositions[_currentMatchIndex], keyword.Length);
+                _txtJsonDetail.ScrollToCaret();
             }
 
             _txtJsonDetail.DeselectAll();
+            UpdateOccurrenceUi();
+        }
+
+        private void ApplyMatchStyle(int matchIndex, bool isCurrent)
+        {
+            var keyword = GetSearchKeyword();
+            if (matchIndex < 0 || matchIndex >= _jsonMatchPositions.Count || string.IsNullOrEmpty(keyword)) return;
+
+            _txtJsonDetail.Select(_jsonMatchPositions[matchIndex], keyword.Length);
+            _txtJsonDetail.SelectionBackColor = isCurrent ? CurrentMatchColor : MatchColor;
+            _txtJsonDetail.SelectionColor = Color.Black;
+        }
+
+        /// <summary>Moves the occurrence navigator to the previous (-1) or next (+1) match.</summary>
+        private void MoveMatch(int delta)
+        {
+            if (_jsonMatchPositions.Count == 0) return;
+
+            ApplyMatchStyle(_currentMatchIndex, isCurrent: false);
+            _currentMatchIndex = (_currentMatchIndex + delta + _jsonMatchPositions.Count) % _jsonMatchPositions.Count;
+            ApplyMatchStyle(_currentMatchIndex, isCurrent: true);
+
+            var keyword = GetSearchKeyword();
+            _txtJsonDetail.Select(_jsonMatchPositions[_currentMatchIndex], keyword.Length);
+            _txtJsonDetail.ScrollToCaret();
+            _txtJsonDetail.DeselectAll();
+
+            UpdateOccurrenceUi();
+        }
+
+        private void UpdateOccurrenceUi()
+        {
+            var total = _jsonMatchPositions.Count;
+            var hasKeyword = !string.IsNullOrEmpty(GetSearchKeyword());
+
+            _btnPrevMatch.Enabled = total > 1;
+            _btnNextMatch.Enabled = total > 1;
+            _lblOccurrenceCount.Text = !hasKeyword
+                ? "No search term"
+                : total == 0
+                    ? "0 occurrences"
+                    : $"Occurrence {_currentMatchIndex + 1} of {total}";
         }
 
         private void ConfigureGridColumns()
@@ -433,18 +733,51 @@ namespace CloudFlowExplorer
             { colModified.HeaderText = "Modified On"; colModified.FillWeight = 11; colModified.DefaultCellStyle.Format = "yyyy-MM-dd HH:mm"; }
 
             // Data-bound columns are regenerated every time DataSource is reassigned, so this
-            // unbound button column needs to be re-added on every call rather than just once.
+            // unbound link column needs to be re-added on every call rather than just once.
             if (_gridFlows.Columns["OpenFlow"] == null)
             {
-                var colOpen = new DataGridViewButtonColumn
+                var colOpen = new DataGridViewLinkColumn
                 {
                     Name = "OpenFlow",
-                    HeaderText = "Open Flow",
-                    Text = "Open in browser",
-                    UseColumnTextForButtonValue = true,
-                    FillWeight = 12
+                    HeaderText = "",
+                    Text = "Open in Power Automate",
+                    UseColumnTextForLinkValue = true,
+                    FillWeight = 14,
+                    LinkColor = AccentColor,
+                    ActiveLinkColor = Color.FromArgb(0, 71, 171),
+                    VisitedLinkColor = AccentColor
                 };
                 _gridFlows.Columns.Add(colOpen);
+            }
+        }
+
+        private void OnGridCellFormatting(object? sender, DataGridViewCellFormattingEventArgs e)
+        {
+            var columnName = _gridFlows.Columns[e.ColumnIndex].Name;
+
+            if (columnName == "StatusDisplay")
+            {
+                e.CellStyle.ForeColor = (e.Value as string) switch
+                {
+                    "Activated" => Color.FromArgb(16, 124, 16),
+                    "Suspended" => Color.FromArgb(196, 43, 28),
+                    "Draft" => Color.DimGray,
+                    _ => _gridFlows.DefaultCellStyle.ForeColor
+                };
+                e.CellStyle.Font = new Font(_gridFlows.Font, FontStyle.Bold);
+                return;
+            }
+
+            if (columnName == "OpenFlow" &&
+                _gridFlows.Rows[e.RowIndex].Cells[e.ColumnIndex] is DataGridViewLinkCell linkCell)
+            {
+                // The link's own text color (not CellStyle.ForeColor) is what DataGridViewLinkCell
+                // paints with, so on a selected row - whose background becomes the same blue as the
+                // link - the link color must switch to white or it reads as invisible.
+                bool selected = _gridFlows.Rows[e.RowIndex].Selected;
+                linkCell.LinkColor = selected ? Color.White : AccentColor;
+                linkCell.ActiveLinkColor = selected ? Color.White : Color.FromArgb(0, 71, 171);
+                linkCell.VisitedLinkColor = selected ? Color.White : AccentColor;
             }
         }
 
@@ -459,23 +792,81 @@ namespace CloudFlowExplorer
             }
         }
 
+        private void OnExportExcelClick(object? sender, EventArgs e)
+        {
+            if (_displayedFlows.Count == 0)
+            {
+                MessageBox.Show("There is nothing to export yet. Load some Cloud Flows first.", "Nothing to export",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            using var sfd = new SaveFileDialog
+            {
+                Filter = "Excel Workbook (*.xlsx)|*.xlsx",
+                FileName = $"CloudFlows_{DateTime.Now:yyyyMMdd_HHmm}.xlsx"
+            };
+            if (sfd.ShowDialog(this) != DialogResult.OK) return;
+
+            try
+            {
+                ExportFlowsToExcel(_displayedFlows, sfd.FileName);
+                MessageBox.Show("Export completed successfully.", "Export to Excel",
+                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not export to Excel: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private static void ExportFlowsToExcel(IEnumerable<FlowRecord> flows, string path)
+        {
+            using var workbook = new XLWorkbook();
+            var sheet = workbook.Worksheets.Add("Cloud Flows");
+
+            string[] headers = { "Flow Name", "Description", "Status", "Owner", "Created On", "Modified On" };
+            for (int i = 0; i < headers.Length; i++)
+                sheet.Cell(1, i + 1).Value = headers[i];
+            sheet.Row(1).Style.Font.Bold = true;
+            sheet.Row(1).Style.Fill.BackgroundColor = XLColor.FromArgb(230, 230, 230);
+
+            int row = 2;
+            foreach (var f in flows)
+            {
+                sheet.Cell(row, 1).Value = f.Name;
+                sheet.Cell(row, 2).Value = f.Description;
+                sheet.Cell(row, 3).Value = f.StatusDisplay;
+                sheet.Cell(row, 4).Value = f.Owner;
+                if (f.CreatedOn.HasValue) sheet.Cell(row, 5).Value = f.CreatedOn.Value;
+                if (f.ModifiedOn.HasValue) sheet.Cell(row, 6).Value = f.ModifiedOn.Value;
+                row++;
+            }
+
+            sheet.Columns().AdjustToContents();
+            workbook.SaveAs(path);
+        }
+
         private void OpenFlowInBrowser(FlowRecord flow)
         {
             var detail = ConnectionDetail;
-            if (detail == null || string.IsNullOrEmpty(detail.WebApplicationUrl))
+            // ConnectionDetail.EnvironmentId is only a UI "environment highlighting" label, not the
+            // real Power Platform environment GUID. The actual environment id is exposed by the
+            // underlying CrmServiceClient (and, through it, the Dataverse OrganizationDetail).
+            var environmentId = detail?.ServiceClient?.EnvironmentId
+                ?? detail?.GetCrmServiceClient()?.EnvironmentId;
+            if (detail == null || string.IsNullOrEmpty(environmentId))
             {
-                MessageBox.Show("Unable to determine the environment URL for the current connection.",
+                MessageBox.Show("Unable to determine the Power Platform environment for the current connection.",
                     "Cannot open flow", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            var baseUrl = detail.WebApplicationUrl.TrimEnd('/');
-            if (!baseUrl.EndsWith("/main.aspx", StringComparison.OrdinalIgnoreCase))
-            {
-                baseUrl += "/main.aspx";
-            }
-
-            var url = $"{baseUrl}?pagetype=entityrecord&etn=workflow&id={flow.FlowId}";
+            // Opens the flow's details page in Power Automate. The "/flows/{id}/edit" shorthand
+            // (without a solution context) does not resolve to the flow and silently redirects to
+            // the home page; the "solutions/~preferred" segment is required for a direct deep link.
+            var url = $"https://make.powerautomate.com/environments/{environmentId}/solutions/~preferred/flows/{flow.FlowId}/details";
 
             try
             {
