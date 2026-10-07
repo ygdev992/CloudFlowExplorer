@@ -40,6 +40,18 @@
   </metadata>
   <files>
     <file src="bin\$configuration$\$targetframework$\$assemblyname$.dll" target="Plugins\" />
+    <!--
+      ClosedXML (Export to Excel) and its transitive dependencies are NOT part of any
+      XrmToolBox installation, unlike XrmToolBoxPackage/CRM SDK/Newtonsoft.Json above, so
+      they must be bundled here or a fresh Tool Library install will crash on export.
+    -->
+    <file src="bin\$configuration$\$targetframework$\ClosedXML.dll" target="Plugins\" />
+    <file src="bin\$configuration$\$targetframework$\DocumentFormat.OpenXml.dll" target="Plugins\" />
+    <file src="bin\$configuration$\$targetframework$\ExcelNumberFormat.dll" target="Plugins\" />
+    <file src="bin\$configuration$\$targetframework$\Irony.dll" target="Plugins\" />
+    <file src="bin\$configuration$\$targetframework$\SixLabors.Fonts.dll" target="Plugins\" />
+    <file src="bin\$configuration$\$targetframework$\System.IO.Packaging.dll" target="Plugins\" />
+    <file src="bin\$configuration$\$targetframework$\XLParser.dll" target="Plugins\" />
     <file src="Resources\icon-128.png" target="\" />
     <file src="README.md" target="\" />
   </files>
