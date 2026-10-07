@@ -59,6 +59,9 @@
     <PackageReference Include="Microsoft.CrmSdk.XrmTooling.CoreAssembly" Version="9.1.1.65" />
 
     <PackageReference Include="Newtonsoft.Json" Version="13.*" />
+
+    <!-- MIT-licensed, free for commercial use (unlike EPPlus >= 5) -->
+    <PackageReference Include="ClosedXML" Version="0.102.*" />
   </ItemGroup>
 
   <ItemGroup>
