@@ -44,14 +44,20 @@
       ClosedXML (Export to Excel) and its transitive dependencies are NOT part of any
       XrmToolBox installation, unlike XrmToolBoxPackage/CRM SDK/Newtonsoft.Json above, so
       they must be bundled here or a fresh Tool Library install will crash on export.
+
+      XrmToolBox review requirement: third-party assemblies must NOT sit alongside the
+      plugin DLL directly under Plugins\, and must not be merged into a single assembly
+      either. Per XrmToolBox's own guidance, they are placed in a subfolder named exactly
+      like the plugin assembly (Plugins\$assemblyname$\) and resolved at runtime via the
+      AssemblyResolve handler registered in CloudFlowExplorerPlugin's constructor.
     -->
-    <file src="bin\$configuration$\$targetframework$\ClosedXML.dll" target="Plugins\" />
-    <file src="bin\$configuration$\$targetframework$\DocumentFormat.OpenXml.dll" target="Plugins\" />
-    <file src="bin\$configuration$\$targetframework$\ExcelNumberFormat.dll" target="Plugins\" />
-    <file src="bin\$configuration$\$targetframework$\Irony.dll" target="Plugins\" />
-    <file src="bin\$configuration$\$targetframework$\SixLabors.Fonts.dll" target="Plugins\" />
-    <file src="bin\$configuration$\$targetframework$\System.IO.Packaging.dll" target="Plugins\" />
-    <file src="bin\$configuration$\$targetframework$\XLParser.dll" target="Plugins\" />
+    <file src="bin\$configuration$\$targetframework$\ClosedXML.dll" target="Plugins\$assemblyname$\" />
+    <file src="bin\$configuration$\$targetframework$\DocumentFormat.OpenXml.dll" target="Plugins\$assemblyname$\" />
+    <file src="bin\$configuration$\$targetframework$\ExcelNumberFormat.dll" target="Plugins\$assemblyname$\" />
+    <file src="bin\$configuration$\$targetframework$\Irony.dll" target="Plugins\$assemblyname$\" />
+    <file src="bin\$configuration$\$targetframework$\SixLabors.Fonts.dll" target="Plugins\$assemblyname$\" />
+    <file src="bin\$configuration$\$targetframework$\System.IO.Packaging.dll" target="Plugins\$assemblyname$\" />
+    <file src="bin\$configuration$\$targetframework$\XLParser.dll" target="Plugins\$assemblyname$\" />
     <file src="Resources\icon-128.png" target="\" />
     <file src="README.md" target="\" />
   </files>
