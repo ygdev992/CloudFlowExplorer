@@ -9,10 +9,23 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# File list - plugin DLL/PDB
+# File list - plugin DLL/PDB (deployed directly under Plugins\)
 $pluginFiles = @(
     "CloudFlowExplorer.dll",
     "CloudFlowExplorer.pdb"
+)
+
+# Third-party dependencies (ClosedXML and its transitive assemblies), deployed under
+# Plugins\CloudFlowExplorer\ to mirror the published NuGet package layout and exercise
+# the same AssemblyResolve handler used by the real XrmToolBox install.
+$dependencyFiles = @(
+    "ClosedXML.dll",
+    "DocumentFormat.OpenXml.dll",
+    "ExcelNumberFormat.dll",
+    "Irony.dll",
+    "SixLabors.Fonts.dll",
+    "System.IO.Packaging.dll",
+    "XLParser.dll"
 )
 
 Write-Host "`n=== Cloud Flow Explorer Deployment ===" -ForegroundColor Cyan
@@ -92,6 +105,10 @@ if ($WhatIf) {
     foreach ($file in $pluginFiles) {
         Write-Host "  [WhatIf] Would copy: $buildPath\$file -> $pluginsPath\$file" -ForegroundColor Gray
     }
+    $dependencyPath = Join-Path $pluginsPath "CloudFlowExplorer"
+    foreach ($file in $dependencyFiles) {
+        Write-Host "  [WhatIf] Would copy: $buildPath\$file -> $dependencyPath\$file" -ForegroundColor Gray
+    }
 }
 else {
     New-Item -ItemType Directory -Force -Path $pluginsPath | Out-Null
@@ -101,6 +118,22 @@ else {
         if (Test-Path $source) {
             Copy-Item -Path $source -Destination $pluginsPath -Force
             Write-Host "  Copied $file" -ForegroundColor Green
+        }
+        else {
+            Write-Host "  Skipped $file (not found)" -ForegroundColor Yellow
+        }
+    }
+
+    # Dependencies go in a subfolder named after the plugin assembly, matching the
+    # published NuGet package layout (Plugins\CloudFlowExplorer\...).
+    $dependencyPath = Join-Path $pluginsPath "CloudFlowExplorer"
+    New-Item -ItemType Directory -Force -Path $dependencyPath | Out-Null
+
+    foreach ($file in $dependencyFiles) {
+        $source = Join-Path $buildPath $file
+        if (Test-Path $source) {
+            Copy-Item -Path $source -Destination $dependencyPath -Force
+            Write-Host "  Copied $file -> CloudFlowExplorer\" -ForegroundColor Green
         }
         else {
             Write-Host "  Skipped $file (not found)" -ForegroundColor Yellow
