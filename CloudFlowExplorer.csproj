@@ -13,7 +13,7 @@
     <AssemblyName>CloudFlowExplorer</AssemblyName>
     <RootNamespace>CloudFlowExplorer</RootNamespace>
     <Title>Cloud Flow Explorer</Title>
-    <Version>1.0.5.0</Version>
+    <Version>1.0.6.0</Version>
     <Authors>ygdev992</Authors>
     <Company>ygdev992</Company>
     <Copyright>Copyright (c) ygdev992 2026</Copyright>
@@ -30,7 +30,7 @@
     <PackageProjectUrl>https://github.com/ygdev992/CloudFlowExplorer</PackageProjectUrl>
     <!-- Space-separated: nuspec <tags> is space-delimited, and semicolons would break NuspecProperties parsing -->
     <PackageTags>XrmToolBox Dynamics365 Dataverse PowerPlatform PowerAutomate CloudFlow</PackageTags>
-    <PackageReleaseNotes>Initial public release.</PackageReleaseNotes>
+    <PackageReleaseNotes>1.0.6.0: Package third-party dependencies (ClosedXML and its transitive assemblies) in a Plugins\CloudFlowExplorer\ subfolder instead of alongside the plugin DLL, resolving the XrmToolBox Tool Library submission rejection ("Assemblies must be in a subfolder or must be merged in one assembly").</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/ygdev992/CloudFlowExplorer</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

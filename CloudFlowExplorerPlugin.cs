@@ -6,7 +6,11 @@
 //   [Convert]::ToBase64String([IO.File]::ReadAllBytes("Resources\icon-80.png"))
 // =============================================================================
 
+using System;
 using System.ComponentModel.Composition;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using XrmToolBox.Extensibility;
 using XrmToolBox.Extensibility.Interfaces;
 
@@ -27,6 +31,42 @@ namespace CloudFlowExplorer
         // "Check for update" / about dialog within XrmToolBox).
         public string RepositoryName => "CloudFlowExplorer";
         public string UserName => "ygdev992";
+
+        // Third-party dependencies (ClosedXML and its transitive assemblies) are packaged
+        // in a "CloudFlowExplorer" subfolder next to this plugin DLL rather than merged into
+        // one assembly or left alongside it under Plugins\ directly, per XrmToolBox Tool
+        // Library packaging rules. Hook AssemblyResolve so the CLR can find them there.
+        public CloudFlowExplorerPlugin()
+        {
+            AppDomain.CurrentDomain.AssemblyResolve += AssemblyResolveEventHandler;
+        }
+
+        /// <summary>
+        /// Resolves referenced assemblies that ship in the "CloudFlowExplorer" subfolder
+        /// alongside this plugin's DLL, instead of directly under the XrmToolBox Plugins
+        /// folder, avoiding version conflicts with other tools.
+        /// </summary>
+        private static Assembly? AssemblyResolveEventHandler(object sender, ResolveEventArgs args)
+        {
+            Assembly currentAssembly = Assembly.GetExecutingAssembly();
+
+            // Base name of the assembly that failed to resolve (strip version/culture/public key token).
+            string requestedName = new AssemblyName(args.Name).Name;
+
+            // Only attempt to resolve assemblies this plugin actually references.
+            bool isOwnDependency = currentAssembly.GetReferencedAssemblies()
+                .Any(a => a.Name == requestedName);
+            if (!isOwnDependency)
+            {
+                return null;
+            }
+
+            string pluginDirectory = Path.GetDirectoryName(currentAssembly.Location) ?? string.Empty;
+            string dependencyFolder = Path.Combine(pluginDirectory, Path.GetFileNameWithoutExtension(currentAssembly.Location));
+            string assemblyPath = Path.Combine(dependencyFolder, $"{requestedName}.dll");
+
+            return File.Exists(assemblyPath) ? Assembly.LoadFrom(assemblyPath) : null;
+        }
 
         public override IXrmToolBoxPluginControl GetControl()
         {
