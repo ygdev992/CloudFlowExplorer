@@ -13,10 +13,10 @@
     <AssemblyName>CloudFlowExplorer</AssemblyName>
     <RootNamespace>CloudFlowExplorer</RootNamespace>
     <Title>Cloud Flow Explorer</Title>
-    <Version>1.0.6.0</Version>
-    <Authors>ygdev992</Authors>
-    <Company>ygdev992</Company>
-    <Copyright>Copyright (c) ygdev992 2026</Copyright>
+    <Version>1.0.7.0</Version>
+    <Authors>Ygor Catapano</Authors>
+    <Company>Ygor Catapano</Company>
+    <Copyright>Copyright (c) Ygor Catapano 2026</Copyright>
     <Description>Search for a keyword across all Cloud Flow (Power Automate) definitions in a Dataverse environment, with a readable JSON viewer and highlighting.</Description>
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
 
