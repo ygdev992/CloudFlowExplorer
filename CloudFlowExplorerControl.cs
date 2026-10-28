@@ -12,6 +12,7 @@ namespace CloudFlowExplorer
 {
     public partial class CloudFlowExplorerControl : PluginControlBase
     {
+        private const string BugReportEmail = "yg.catapano@outlook.it";
         private const string SearchPlaceholder = "Enter a keyword to search in the flow definition...";
 
         private static readonly Color AccentColor = Color.FromArgb(0, 120, 212);
@@ -108,7 +109,11 @@ namespace CloudFlowExplorer
                 ForeColor = Color.Black,
                 Margin = new Padding(0, 7, 0, 0)
             };
-            panelConnectionRight.Controls.AddRange(new Control[] { _lblConnectionDot, _lblConnectionPrefix, _lblConnectionValue });
+            var btnReportBug = new Button { Text = "Report a bug", Width = 130, Height = 30, Margin = new Padding(0, 0, 16, 0) };
+            btnReportBug.Click += OnReportBugClick;
+            ApplyButtonGlyph(btnReportBug, "\uE7BA", Color.FromArgb(200, 60, 40));
+
+            panelConnectionRight.Controls.AddRange(new Control[] { btnReportBug, _lblConnectionDot, _lblConnectionPrefix, _lblConnectionValue });
 
             rowActions.Controls.Add(panelConnectionRight);
             rowActions.Controls.Add(panelActionsLeft);
@@ -876,6 +881,111 @@ namespace CloudFlowExplorer
             {
                 MessageBox.Show($"Could not open the flow in the browser: {ex.Message}", "Error",
                     MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void OnReportBugClick(object sender, EventArgs e)
+        {
+            var pluginVersion = typeof(CloudFlowExplorerControl).Assembly.GetName().Version?.ToString();
+            var xtbVersion = Application.ProductVersion;
+            var osVersion = Environment.OSVersion.VersionString;
+
+            const string subject = "Cloud Flow Explorer - Bug report";
+            var body = "Please describe the problem and the steps to reproduce it. "
+                + "Do not include secrets or confidential flow content.\n\n\n"
+                + "--- Environment ---\n"
+                + $"Plugin version: {pluginVersion}\n"
+                + $"XrmToolBox version: {xtbVersion}\n"
+                + $"OS: {osVersion}\n";
+
+            using var dialog = new Form
+            {
+                Text = "Report a bug",
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                StartPosition = FormStartPosition.CenterParent,
+                MaximizeBox = false,
+                MinimizeBox = false,
+                ShowInTaskbar = false,
+                ClientSize = new Size(380, 232),
+                Font = Font
+            };
+            var lblIntro = new System.Windows.Forms.Label
+            {
+                Text = "How would you like to report the bug?",
+                AutoSize = true,
+                Location = new Point(16, 16)
+            };
+            var btnEmail = new Button
+            {
+                Text = "Report via email",
+                Size = new Size(348, 34),
+                Location = new Point(16, 46),
+                DialogResult = DialogResult.Yes
+            };
+            var btnGitHub = new Button
+            {
+                Text = "Report on GitHub (requires a GitHub account)",
+                Size = new Size(348, 34),
+                Location = new Point(16, 88),
+                DialogResult = DialogResult.No
+            };
+            var lblManual = new System.Windows.Forms.Label
+            {
+                Text = $"No mail app opens correctly? Send your report to:\n{BugReportEmail}",
+                AutoSize = true,
+                Location = new Point(16, 136)
+            };
+            var btnCopy = new Button
+            {
+                Text = "Copy email address and details",
+                Size = new Size(348, 34),
+                Location = new Point(16, 182)
+            };
+            btnCopy.Click += (_, _) =>
+            {
+                try
+                {
+                    Clipboard.SetText($"To: {BugReportEmail}\nSubject: {subject}\n\n{body}");
+                    btnCopy.Text = "Copied to clipboard";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(dialog, $"Could not copy to the clipboard: {ex.Message}", "Error",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            };
+            dialog.Controls.AddRange(new Control[] { lblIntro, btnEmail, btnGitHub, lblManual, btnCopy });
+            dialog.CancelButton = btnGitHub;
+
+            var result = dialog.ShowDialog(this);
+            if (result != DialogResult.Yes && result != DialogResult.No)
+            {
+                return;
+            }
+
+            string url;
+            if (result == DialogResult.Yes)
+            {
+                url = $"mailto:{BugReportEmail}?subject={Uri.EscapeDataString(subject)}"
+                    + $"&body={Uri.EscapeDataString(body)}";
+            }
+            else
+            {
+                url = "https://github.com/ygdev992/CloudFlowExplorer/issues/new?template=bug_report.yml"
+                    + "&plugin-version=" + Uri.EscapeDataString(pluginVersion ?? "")
+                    + "&xtb-version=" + Uri.EscapeDataString(xtbVersion ?? "")
+                    + "&os=" + Uri.EscapeDataString(osVersion);
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Could not open the email client or browser: {ex.Message}\n\nYou can report the bug by email at {BugReportEmail} "
+                    + "or at https://github.com/ygdev992/CloudFlowExplorer/issues",
+                    "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

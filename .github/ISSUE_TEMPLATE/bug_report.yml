@@ -1,0 +1,56 @@
+name: Bug report
+description: Something doesn't work as expected in Cloud Flow Explorer
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping to improve Cloud Flow Explorer!
+        **Please do not paste secrets, tokens, connection strings or confidential flow content** in this report. Blur sensitive data in screenshots.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Connect to an environment
+        2. Click "Load Cloud Flows"
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or error message
+      description: Drag and drop images here, or paste the full error text.
+  - type: input
+    id: plugin-version
+    attributes:
+      label: Plugin version
+      description: Pre-filled when using the "Report a bug" button in the plugin.
+    validations:
+      required: true
+  - type: input
+    id: xtb-version
+    attributes:
+      label: XrmToolBox version
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Dataverse environment type
+      options:
+        - Production
+        - Sandbox
+        - Developer
+        - Trial
+        - Not sure

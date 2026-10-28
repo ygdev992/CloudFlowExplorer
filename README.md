@@ -39,6 +39,13 @@ dotnet build --configuration Release
 5. Select a row to view its pretty-printed JSON definition in the bottom panel, with every match highlighted. Use the **◀ / ▶** buttons above the JSON viewer to jump between occurrences; the counter shows "Occurrence x of y".
 6. Click **Export to Excel** to save the currently displayed flows to an `.xlsx` workbook.
 
+## Reporting a bug
+
+- Easiest: click **Report a bug** in the plugin toolbar and choose **Report via email**. It opens a pre-filled email to [yg.catapano@outlook.it](mailto:yg.catapano@outlook.it) with your plugin, XrmToolBox and OS versions.
+- If your default mail handler is a browser (so the draft is lost), use **Copy email address and details** and paste it into any mail app or webmail.
+- Or choose **Report on GitHub** (free GitHub account required), or open a [new issue](https://github.com/ygdev992/CloudFlowExplorer/issues/new?template=bug_report.yml) manually.
+- Describe the steps to reproduce and attach a screenshot or the error message. Do not include secrets or confidential flow content.
+
 ## Development
 
 - Target framework: `.NET Framework 4.8` (matches the XrmToolBox host application).
