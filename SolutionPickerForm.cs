@@ -6,7 +6,7 @@ namespace CloudFlowExplorer
     public class SolutionPickerForm : Form
     {
         private readonly TextBox _txtSearch;
-        private readonly ListView _listSolutions;
+        private readonly DataGridView _listSolutions;
         private readonly Button _btnOk;
         private readonly Button _btnCancel;
         private readonly List<SolutionRecord> _allSolutions;
@@ -25,72 +25,96 @@ namespace CloudFlowExplorer
             MaximizeBox = true;
             MinimizeBox = false;
             ShowIcon = false;
-            Font = new Font("Segoe UI", 9f);
+            Font = FluentStyle.Regular;
 
             _allSolutions = solutions.ToList();
 
-            var panelSearch = new Panel { Dock = DockStyle.Top, Height = 36, Padding = new Padding(8, 6, 8, 4) };
-            var lblSearch = new System.Windows.Forms.Label { Text = "Search:", AutoSize = true, Location = new Point(0, 8) };
+            var header = new System.Windows.Forms.Label
+            {
+                Text = "Select a solution",
+                Dock = DockStyle.Top,
+                Height = 44,
+                BackColor = FluentStyle.Navy,
+                ForeColor = Color.White,
+                Font = FluentStyle.Title,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(16, 0, 0, 0)
+            };
+
+            var panelSearch = new Panel { Dock = DockStyle.Top, Height = 52, BackColor = FluentStyle.PageBackground, Padding = new Padding(12, 10, 12, 10) };
+            var searchHost = FluentStyle.CreateBorderedHost();
+            searchHost.Dock = DockStyle.Fill;
+            searchHost.Padding = new Padding(1);
+            var iconSearch = new System.Windows.Forms.Label
+            {
+                Text = "\uE721",
+                Font = FluentStyle.IconFont,
+                ForeColor = FluentStyle.Accent,
+                Dock = DockStyle.Left,
+                Width = 32,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
             _txtSearch = new TextBox
             {
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
-                Location = new Point(55, 4),
-                Width = panelSearch.Width - 65
+                Dock = DockStyle.Fill,
+                BorderStyle = BorderStyle.None,
+                BackColor = FluentStyle.Surface,
+                ForeColor = FluentStyle.TextPrimary
             };
             _txtSearch.TextChanged += (s, e) => ApplyFilter(_txtSearch.Text);
-            panelSearch.Controls.AddRange(new Control[] { lblSearch, _txtSearch });
-            panelSearch.Resize += (s, e) => { _txtSearch.Width = panelSearch.Width - 65; };
+            var textWrap = new Panel { Dock = DockStyle.Fill, BackColor = FluentStyle.Surface, Padding = new Padding(0, 6, 8, 0) };
+            textWrap.Controls.Add(_txtSearch);
+            searchHost.Controls.Add(textWrap);
+            searchHost.Controls.Add(iconSearch);
+            panelSearch.Controls.Add(searchHost);
 
-            _listSolutions = new ListView
+            _listSolutions = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                View = View.Details,
-                FullRowSelect = true,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = false,
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
-                HideSelection = false
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
-            _listSolutions.Columns.Add("Display Name", 230);
-            _listSolutions.Columns.Add("Unique Name", 150);
-            _listSolutions.Columns.Add("Version", 90);
-            _listSolutions.Columns.Add("Managed", 70);
-            _listSolutions.DoubleClick += (s, e) => { if (_listSolutions.SelectedItems.Count > 0) AcceptSelection(); };
-
+            FluentStyle.StyleGrid(_listSolutions);
+            _listSolutions.Columns.Add("DisplayName", "Display Name");
+            _listSolutions.Columns.Add("UniqueName", "Unique Name");
+            _listSolutions.Columns.Add("Version", "Version");
+            _listSolutions.Columns.Add("Managed", "Managed");
+            _listSolutions.Columns[0].FillWeight = 40;
+            _listSolutions.Columns[1].FillWeight = 30;
+            _listSolutions.Columns[2].FillWeight = 18;
+            _listSolutions.Columns[3].FillWeight = 12;
+            _listSolutions.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) AcceptSelection(); };
             ApplyFilter("");
 
-            var panelButtons = new Panel { Dock = DockStyle.Bottom, Height = 44 };
-
-            _btnOk = new Button
+            var panelButtons = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = FluentStyle.Surface, Padding = new Padding(12, 10, 12, 10) };
+            panelButtons.Paint += (s, e) =>
             {
-                Text = "Load Flows",
-                DialogResult = DialogResult.OK,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Width = 110,
-                Height = 28,
-                Location = new Point(panelButtons.Width - 230, 8)
+                using var pen = new Pen(FluentStyle.Border);
+                e.Graphics.DrawLine(pen, 0, 0, panelButtons.Width, 0);
             };
+
+            _btnOk = new Button { Text = "Load Flows", DialogResult = DialogResult.OK, Width = 110, Dock = DockStyle.Right };
             _btnOk.Click += (s, e) => AcceptSelection();
+            FluentStyle.StyleButton(_btnOk, primary: true);
 
-            _btnCancel = new Button
-            {
-                Text = "Cancel",
-                DialogResult = DialogResult.Cancel,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Width = 100,
-                Height = 28,
-                Location = new Point(panelButtons.Width - 110, 8)
-            };
+            _btnCancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, Width = 90, Dock = DockStyle.Right };
+            FluentStyle.StyleButton(_btnCancel, primary: false);
 
-            panelButtons.Controls.Add(_btnOk);
             panelButtons.Controls.Add(_btnCancel);
-            panelButtons.Resize += (s, e) =>
-            {
-                _btnOk.Location = new Point(panelButtons.Width - 230, 8);
-                _btnCancel.Location = new Point(panelButtons.Width - 110, 8);
-            };
+            panelButtons.Controls.Add(new Panel { Dock = DockStyle.Right, Width = 8 });
+            panelButtons.Controls.Add(_btnOk);
 
+            BackColor = FluentStyle.PageBackground;
             Controls.Add(_listSolutions);
             Controls.Add(panelButtons);
             Controls.Add(panelSearch);
+            Controls.Add(header);
 
             AcceptButton = _btnOk;
             CancelButton = _btnCancel;
@@ -100,8 +124,7 @@ namespace CloudFlowExplorer
         {
             keyword = keyword.Trim();
 
-            _listSolutions.BeginUpdate();
-            _listSolutions.Items.Clear();
+            _listSolutions.Rows.Clear();
 
             var matches = string.IsNullOrEmpty(keyword)
                 ? _allSolutions
@@ -111,28 +134,22 @@ namespace CloudFlowExplorer
 
             foreach (var solution in matches)
             {
-                var item = new ListViewItem(solution.FriendlyName) { Tag = solution };
-                item.SubItems.Add(solution.UniqueName);
-                item.SubItems.Add(solution.Version);
-                item.SubItems.Add(solution.IsManaged ? "Yes" : "No");
-                _listSolutions.Items.Add(item);
+                var index = _listSolutions.Rows.Add(solution.FriendlyName, solution.UniqueName, solution.Version, solution.IsManaged ? "Yes" : "No");
+                _listSolutions.Rows[index].Tag = solution;
             }
 
-            if (_listSolutions.Items.Count > 0)
-                _listSolutions.Items[0].Selected = true;
-
-            _listSolutions.EndUpdate();
+            if (_listSolutions.Rows.Count > 0)
+                _listSolutions.Rows[0].Selected = true;
         }
-
         private void AcceptSelection()
         {
-            if (_listSolutions.SelectedItems.Count == 0)
+            if (_listSolutions.SelectedRows.Count == 0)
             {
                 MessageBox.Show("Please select a solution.", "No selection", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            var solution = (SolutionRecord)_listSolutions.SelectedItems[0].Tag!;
+            var solution = (SolutionRecord)_listSolutions.SelectedRows[0].Tag!;
             SelectedSolutionId = solution.SolutionId;
             SelectedSolutionName = solution.FriendlyName;
             DialogResult = DialogResult.OK;
