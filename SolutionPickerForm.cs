@@ -6,7 +6,7 @@ namespace CloudFlowExplorer
     public class SolutionPickerForm : Form
     {
         private readonly TextBox _txtSearch;
-        private readonly ListView _listSolutions;
+        private readonly DataGridView _listSolutions;
         private readonly Button _btnOk;
         private readonly Button _btnCancel;
         private readonly List<SolutionRecord> _allSolutions;
@@ -68,23 +68,28 @@ namespace CloudFlowExplorer
             searchHost.Controls.Add(iconSearch);
             panelSearch.Controls.Add(searchHost);
 
-            _listSolutions = new ListView
+            _listSolutions = new DataGridView
             {
                 Dock = DockStyle.Fill,
-                View = View.Details,
-                FullRowSelect = true,
+                ReadOnly = true,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                AllowUserToResizeRows = false,
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 MultiSelect = false,
-                HideSelection = false,
-                BorderStyle = BorderStyle.None,
-                BackColor = FluentStyle.Surface,
-                ForeColor = FluentStyle.TextPrimary
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill
             };
-            _listSolutions.Columns.Add("Display Name", 230);
-            _listSolutions.Columns.Add("Unique Name", 150);
-            _listSolutions.Columns.Add("Version", 90);
-            _listSolutions.Columns.Add("Managed", 70);
-            _listSolutions.DoubleClick += (s, e) => { if (_listSolutions.SelectedItems.Count > 0) AcceptSelection(); };
-
+            FluentStyle.StyleGrid(_listSolutions);
+            _listSolutions.Columns.Add("DisplayName", "Display Name");
+            _listSolutions.Columns.Add("UniqueName", "Unique Name");
+            _listSolutions.Columns.Add("Version", "Version");
+            _listSolutions.Columns.Add("Managed", "Managed");
+            _listSolutions.Columns[0].FillWeight = 40;
+            _listSolutions.Columns[1].FillWeight = 30;
+            _listSolutions.Columns[2].FillWeight = 18;
+            _listSolutions.Columns[3].FillWeight = 12;
+            _listSolutions.CellDoubleClick += (s, e) => { if (e.RowIndex >= 0) AcceptSelection(); };
             ApplyFilter("");
 
             var panelButtons = new Panel { Dock = DockStyle.Bottom, Height = 52, BackColor = FluentStyle.Surface, Padding = new Padding(12, 10, 12, 10) };
@@ -119,8 +124,7 @@ namespace CloudFlowExplorer
         {
             keyword = keyword.Trim();
 
-            _listSolutions.BeginUpdate();
-            _listSolutions.Items.Clear();
+            _listSolutions.Rows.Clear();
 
             var matches = string.IsNullOrEmpty(keyword)
                 ? _allSolutions
@@ -130,28 +134,22 @@ namespace CloudFlowExplorer
 
             foreach (var solution in matches)
             {
-                var item = new ListViewItem(solution.FriendlyName) { Tag = solution };
-                item.SubItems.Add(solution.UniqueName);
-                item.SubItems.Add(solution.Version);
-                item.SubItems.Add(solution.IsManaged ? "Yes" : "No");
-                _listSolutions.Items.Add(item);
+                var index = _listSolutions.Rows.Add(solution.FriendlyName, solution.UniqueName, solution.Version, solution.IsManaged ? "Yes" : "No");
+                _listSolutions.Rows[index].Tag = solution;
             }
 
-            if (_listSolutions.Items.Count > 0)
-                _listSolutions.Items[0].Selected = true;
-
-            _listSolutions.EndUpdate();
+            if (_listSolutions.Rows.Count > 0)
+                _listSolutions.Rows[0].Selected = true;
         }
-
         private void AcceptSelection()
         {
-            if (_listSolutions.SelectedItems.Count == 0)
+            if (_listSolutions.SelectedRows.Count == 0)
             {
                 MessageBox.Show("Please select a solution.", "No selection", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            var solution = (SolutionRecord)_listSolutions.SelectedItems[0].Tag!;
+            var solution = (SolutionRecord)_listSolutions.SelectedRows[0].Tag!;
             SelectedSolutionId = solution.SolutionId;
             SelectedSolutionName = solution.FriendlyName;
             DialogResult = DialogResult.OK;
