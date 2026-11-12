@@ -23,6 +23,18 @@ namespace CloudFlowExplorer
         private static readonly Color MatchColor = Color.FromArgb(255, 213, 128);
         private static readonly Color CurrentMatchColor = Color.FromArgb(255, 140, 0);
 
+        private static readonly Color JsonBackColor = Color.FromArgb(11, 26, 51);
+        private static readonly Color JsonTextColor = Color.FromArgb(212, 212, 212);
+        private static readonly Color JsonKeyColor = Color.FromArgb(156, 220, 254);
+        private static readonly Color JsonStringColor = Color.FromArgb(206, 145, 120);
+        private static readonly Color JsonNumberColor = Color.FromArgb(181, 206, 168);
+        private static readonly Color JsonKeywordColor = Color.FromArgb(86, 156, 214);
+        private const int SyntaxColoringMaxLength = 400_000;
+        private static readonly Regex JsonTokenRegex = new Regex(
+            "\"(?:\\\\.|[^\"\\\\])*\"(\\s*:)?|-?\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?|\\b(?:true|false|null)\\b",
+            RegexOptions.Compiled);
+        private string _jsonText = "";
+
         // Controls
         private readonly CommandButton _btnLoad;
         private readonly CommandButton _btnLoadFromSolution;
@@ -63,7 +75,7 @@ namespace CloudFlowExplorer
             {
                 Image = LoadLogo(),
                 SizeMode = PictureBoxSizeMode.Zoom,
-                BackColor = Color.White,
+                BackColor = FluentStyle.Navy,
                 Size = new Size(30, 30),
                 Location = new Point(0, 5)
             });
@@ -285,10 +297,20 @@ namespace CloudFlowExplorer
                 BorderStyle = BorderStyle.None,
                 ScrollBars = RichTextBoxScrollBars.Both,
                 WordWrap = false,
-                Font = new Font("Cascadia Code", 9f, FontStyle.Regular),
-                BackColor = Color.FromArgb(30, 30, 30),
-                ForeColor = Color.FromArgb(212, 212, 212)
+                Font = new Font(IsFontInstalled("Cascadia Code") ? "Cascadia Code" : "Consolas", 10f, FontStyle.Regular),
+                BackColor = JsonBackColor,
+                ForeColor = JsonTextColor
             };
+
+            var btnCopyJson = new Button { Text = "\uE8C8", Width = 28, Height = 24, Margin = new Padding(0, 8, 4, 0) };
+            FluentStyle.StyleIconButton(btnCopyJson);
+            btnCopyJson.Font = FluentStyle.IconFont;
+            btnCopyJson.Click += (s, e) =>
+            {
+                if (!string.IsNullOrEmpty(_jsonText)) Clipboard.SetText(_jsonText);
+            };
+            new ToolTip().SetToolTip(btnCopyJson, "Copy JSON");
+            panelOccurrenceNav.Controls.Add(btnCopyJson);
 
             panelRight.Controls.Add(_txtJsonDetail);
             panelRight.Controls.Add(panelJsonHeader);
@@ -572,20 +594,84 @@ namespace CloudFlowExplorer
                     // the whole application.
                     try
                     {
-                        _txtJsonDetail.Text = FormatJson(flow.JsonDefinition);
+                        _jsonText = FormatJson(flow.JsonDefinition);
                     }
                     catch
                     {
-                        _txtJsonDetail.Text = flow.JsonDefinition;
+                        _jsonText = flow.JsonDefinition;
                     }
                 }
                 else
                 {
-                    _txtJsonDetail.Text = "(No JSON definition available)";
+                    _jsonText = "(No JSON definition available)";
                 }
 
                 RefreshJsonHighlighting();
             }
+        }
+
+        private static bool IsFontInstalled(string name)
+        {
+            using var families = new System.Drawing.Text.InstalledFontCollection();
+            return families.Families.Any(f => f.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string RtfEscape(string s)
+        {
+            var sb = new System.Text.StringBuilder(s.Length + 16);
+            foreach (var c in s)
+            {
+                switch (c)
+                {
+                    case '\\': sb.Append("\\\\"); break;
+                    case '{': sb.Append("\\{"); break;
+                    case '}': sb.Append("\\}"); break;
+                    case '\n': sb.Append("\\par\n"); break;
+                    case '\r': break;
+                    default:
+                        if (c < 128) sb.Append(c);
+                        else sb.Append("\\u").Append((short)c).Append('?');
+                        break;
+                }
+            }
+            return sb.ToString();
+        }
+
+        private static string RtfColor(Color c) => $"\\red{c.R}\\green{c.G}\\blue{c.B};";
+
+        // Rebuilds the viewer content (also clearing any previous match highlight) as RTF
+        // with JSON syntax colours; very large documents fall back to plain text.
+        private void RenderJson()
+        {
+            var text = _jsonText.Replace("\r\n", "\n");
+            if (text.Length == 0 || text.Length > SyntaxColoringMaxLength)
+            {
+                _txtJsonDetail.Text = text;
+                return;
+            }
+
+            var font = _txtJsonDetail.Font;
+            var sb = new System.Text.StringBuilder(text.Length * 2);
+            sb.Append("{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0\\fmodern ").Append(font.Name).Append(";}}");
+            sb.Append("{\\colortbl;")
+              .Append(RtfColor(JsonTextColor)).Append(RtfColor(JsonKeyColor)).Append(RtfColor(JsonStringColor))
+              .Append(RtfColor(JsonNumberColor)).Append(RtfColor(JsonKeywordColor)).Append('}');
+            sb.Append("\\f0\\fs").Append((int)Math.Round(font.SizeInPoints * 2)).Append("\\cf1 ");
+
+            int last = 0;
+            foreach (Match m in JsonTokenRegex.Matches(text))
+            {
+                sb.Append(RtfEscape(text.Substring(last, m.Index - last)));
+                int color;
+                if (m.Value[0] == '"') color = m.Groups[1].Success ? 2 : 3;
+                else if (char.IsLetter(m.Value[0])) color = 5;
+                else color = 4;
+                sb.Append("\\cf").Append(color).Append(' ').Append(RtfEscape(m.Value)).Append("\\cf1 ");
+                last = m.Index + m.Length;
+            }
+            sb.Append(RtfEscape(text.Substring(last))).Append('}');
+
+            _txtJsonDetail.Rtf = sb.ToString();
         }
 
         // Kept in its own method (never inlined into the caller) so that a JIT-time failure to
@@ -605,13 +691,8 @@ namespace CloudFlowExplorer
         /// </summary>
         private void RefreshJsonHighlighting()
         {
+            RenderJson();
             var text = _txtJsonDetail.Text;
-
-            // Reset any highlighting left over from a previous selection.
-            _txtJsonDetail.SelectAll();
-            _txtJsonDetail.SelectionBackColor = _txtJsonDetail.BackColor;
-            _txtJsonDetail.SelectionColor = _txtJsonDetail.ForeColor;
-            _txtJsonDetail.DeselectAll();
 
             var keyword = GetSearchKeyword();
             _jsonMatchPositions = FindMatchPositions(text ?? "", keyword, _exactMatch);

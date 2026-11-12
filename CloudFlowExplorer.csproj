@@ -65,7 +65,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Resources\icon-128.png" LogicalName="CloudFlowExplorer.logo.png" />
+    <EmbeddedResource Include="Resources\logo-header.png" LogicalName="CloudFlowExplorer.logo.png" />
   </ItemGroup>
 
   <ItemGroup>
