@@ -175,7 +175,7 @@ namespace CloudFlowExplorer
             };
 
             // --- Mode banner: always tells which search mode the next search will use ---
-            var panelMode = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = FluentStyle.PageBackground, Padding = new Padding(12, 0, 12, 4) };
+            var panelMode = new Panel { Dock = DockStyle.Top, Height = 38, BackColor = FluentStyle.PageBackground, Padding = new Padding(12, 10, 12, 0) };
             _lblModeChip = new System.Windows.Forms.Label
             {
                 AutoSize = false,
@@ -288,8 +288,8 @@ namespace CloudFlowExplorer
 
             panelCenter.Controls.Add(_gridFlows);
             panelCenter.Controls.Add(panelStatus);
-            panelCenter.Controls.Add(panelMode);
             panelCenter.Controls.Add(rowSearch);
+            panelCenter.Controls.Add(panelMode);
 
             _rail.Select(ModeGeneral);
 
