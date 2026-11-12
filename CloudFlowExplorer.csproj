@@ -13,7 +13,7 @@
     <AssemblyName>CloudFlowExplorer</AssemblyName>
     <RootNamespace>CloudFlowExplorer</RootNamespace>
     <Title>Cloud Flow Explorer</Title>
-    <Version>1.0.8.0</Version>
+    <Version>1.0.9.0</Version>
     <Authors>Ygor Catapano</Authors>
     <Company>Ygor Catapano</Company>
     <Copyright>Copyright (c) Ygor Catapano 2026</Copyright>
@@ -30,7 +30,7 @@
     <PackageProjectUrl>https://github.com/ygdev992/CloudFlowExplorer</PackageProjectUrl>
     <!-- Space-separated: nuspec <tags> is space-delimited, and semicolons would break NuspecProperties parsing -->
     <PackageTags>XrmToolBox Dynamics365 Dataverse PowerPlatform PowerAutomate CloudFlow</PackageTags>
-    <PackageReleaseNotes>1.0.6.0: Package third-party dependencies (ClosedXML and its transitive assemblies) in a Plugins\CloudFlowExplorer\ subfolder instead of alongside the plugin DLL, resolving the XrmToolBox Tool Library submission rejection ("Assemblies must be in a subfolder or must be merged in one assembly").</PackageReleaseNotes>
+    <PackageReleaseNotes>1.0.9.0: UI redesign (Fluent style): new logo, command bar, collapsible left menu with Contains / Whole word search modes and a mode indicator, "How it works" help, syntax-coloured JSON panel with copy button, restyled solution picker.</PackageReleaseNotes>
     <RepositoryUrl>https://github.com/ygdev992/CloudFlowExplorer</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
