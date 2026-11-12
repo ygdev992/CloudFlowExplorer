@@ -18,6 +18,9 @@ namespace CloudFlowExplorer
         private const string ModeGeneral = "general";
         private const string ModeExact = "exact";
         private const string ActionReportBug = "reportBug";
+        private const string ActionHowItWorks = "howItWorks";
+        private System.Windows.Forms.Label _lblModeChip = null!;
+        private System.Windows.Forms.Label _lblModeDesc = null!;
 
         private static readonly Color AccentColor = Color.FromArgb(0, 120, 212);
         private static readonly Color MatchColor = Color.FromArgb(255, 213, 128);
@@ -155,12 +158,56 @@ namespace CloudFlowExplorer
             // --- Left rail: search mode + bug report ---
             _rail = new NavRail();
             _rail.AddHeading("SEARCH MODE");
-            _rail.AddChoice(ModeGeneral, "\uE721", "General search");
-            _rail.AddChoice(ModeExact, "\uE71C", "Exact word search");
+            _rail.AddChoice(ModeGeneral, "\uE721", "Contains");
+            _rail.AddChoice(ModeExact, "\uE71C", "Whole word");
+            _rail.AddBottomAction(ActionHowItWorks, "\uE897", "How it works");
             _rail.AddBottomAction(ActionReportBug, "\uE7BA", "Report a bug");
-            _rail.ItemSelected += (s, id) => _exactMatch = id == ModeExact;
-            _rail.ActionInvoked += (s, id) => { if (id == ActionReportBug) OnReportBugClick(s, EventArgs.Empty); };
-            _rail.Select(ModeGeneral);
+            _rail.ItemSelected += (s, id) =>
+            {
+                _exactMatch = id == ModeExact;
+                UpdateModeBanner();
+                if (_allFlows.Count > 0 && !string.IsNullOrEmpty(GetSearchKeyword())) OnSearchClick(s, EventArgs.Empty);
+            };
+            _rail.ActionInvoked += (s, id) =>
+            {
+                if (id == ActionReportBug) OnReportBugClick(s, EventArgs.Empty);
+                else if (id == ActionHowItWorks) ShowHowItWorks();
+            };
+
+            // --- Mode banner: always tells which search mode the next search will use ---
+            var panelMode = new Panel { Dock = DockStyle.Top, Height = 34, BackColor = FluentStyle.PageBackground, Padding = new Padding(12, 0, 12, 4) };
+            _lblModeChip = new System.Windows.Forms.Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Left,
+                Width = 96,
+                TextAlign = ContentAlignment.MiddleCenter,
+                BackColor = FluentStyle.Accent,
+                ForeColor = Color.White,
+                Font = FluentStyle.Semibold
+            };
+            _lblModeDesc = new System.Windows.Forms.Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = FluentStyle.TextSecondary,
+                Padding = new Padding(10, 0, 0, 0)
+            };
+            var lnkHow = new LinkLabel
+            {
+                Text = "How it works",
+                AutoSize = false,
+                Dock = DockStyle.Right,
+                Width = 90,
+                TextAlign = ContentAlignment.MiddleRight,
+                LinkColor = FluentStyle.Accent,
+                ActiveLinkColor = FluentStyle.Accent
+            };
+            lnkHow.LinkClicked += (s, e) => ShowHowItWorks();
+            panelMode.Controls.Add(_lblModeDesc);
+            panelMode.Controls.Add(lnkHow);
+            panelMode.Controls.Add(_lblModeChip);
 
             // --- Centre: search row, flow grid, status bar ---
             var panelCenter = new Panel { Dock = DockStyle.Fill, BackColor = FluentStyle.PageBackground };
@@ -241,7 +288,10 @@ namespace CloudFlowExplorer
 
             panelCenter.Controls.Add(_gridFlows);
             panelCenter.Controls.Add(panelStatus);
+            panelCenter.Controls.Add(panelMode);
             panelCenter.Controls.Add(rowSearch);
+
+            _rail.Select(ModeGeneral);
 
             // --- Right: JSON viewer with an occurrence navigator above it ---
             var panelRight = new Panel { Dock = DockStyle.Fill, BackColor = FluentStyle.Surface };
@@ -514,6 +564,26 @@ namespace CloudFlowExplorer
         {
             var text = _txtSearch.Text.Trim();
             return text == SearchPlaceholder ? "" : text;
+        }
+
+        private void UpdateModeBanner()
+        {
+            if (_exactMatch)
+            {
+                _lblModeChip.Text = "WHOLE WORD";
+                _lblModeDesc.Text = "Matches the complete word only: \"account\" finds \"account\" but not \"accountid\".";
+            }
+            else
+            {
+                _lblModeChip.Text = "CONTAINS";
+                _lblModeDesc.Text = "Finds the text anywhere: \"acc\" also matches \"account\" and \"accountid\".";
+            }
+        }
+
+        private void ShowHowItWorks()
+        {
+            using var dlg = new HowItWorksForm();
+            dlg.ShowDialog(this);
         }
 
         private void OnSearchClick(object? sender, EventArgs e)
