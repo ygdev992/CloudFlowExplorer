@@ -7,12 +7,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
 
-    <!-- Avoid duplicate attributes alongside Properties/AssemblyInfo.cs -->
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <!-- Assembly/File version are generated from <Version>; AssemblyInfo.cs only keeps ComVisible/Guid -->
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
 
     <AssemblyName>CloudFlowExplorer</AssemblyName>
     <RootNamespace>CloudFlowExplorer</RootNamespace>
     <Title>Cloud Flow Explorer</Title>
+    <Product>CloudFlowExplorer</Product>
     <Version>1.0.10.0</Version>
     <Authors>Ygor Catapano</Authors>
     <Company>Ygor Catapano</Company>
