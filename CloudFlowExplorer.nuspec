@@ -13,8 +13,10 @@
       which fails XrmToolBox's registration page icon URL validation. So we deliberately do
       NOT declare <icon> here; only <iconUrl>, pointing at a raw GitHub-hosted PNG that NuGet.org
       will then expose as-is (and that serves a proper image/png content type).
+      The URL is pinned to the release tag: NuGet.org caches the icon per URL, so a "main" URL
+      keeps showing the first icon ever fetched. Change the tag in the URL when the icon changes.
     -->
-    <iconUrl>https://raw.githubusercontent.com/ygdev992/CloudFlowExplorer/main/Resources/icon-128.png</iconUrl>
+    <iconUrl>https://raw.githubusercontent.com/ygdev992/CloudFlowExplorer/v1.0.10/Resources/icon-128.png</iconUrl>
     <readme>README.md</readme>
     <projectUrl>$projecturl$</projectUrl>
     <description>$description$</description>
