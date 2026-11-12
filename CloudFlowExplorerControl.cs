@@ -15,17 +15,21 @@ namespace CloudFlowExplorer
         private const string BugReportEmail = "yg.catapano@outlook.it";
         private const string SearchPlaceholder = "Enter a keyword to search in the flow definition...";
 
+        private const string ModeGeneral = "general";
+        private const string ModeExact = "exact";
+        private const string ActionReportBug = "reportBug";
+
         private static readonly Color AccentColor = Color.FromArgb(0, 120, 212);
         private static readonly Color MatchColor = Color.FromArgb(255, 213, 128);
         private static readonly Color CurrentMatchColor = Color.FromArgb(255, 140, 0);
 
         // Controls
-        private readonly Button _btnLoad;
-        private readonly Button _btnLoadFromSolution;
-        private readonly Button _btnExportExcel;
+        private readonly CommandButton _btnLoad;
+        private readonly CommandButton _btnLoadFromSolution;
+        private readonly CommandButton _btnExportExcel;
         private readonly TextBox _txtSearch;
         private readonly Button _btnSearch;
-        private readonly CheckBox _chkExactMatch;
+        private readonly NavRail _rail;
         private readonly DataGridView _gridFlows;
         private readonly RichTextBox _txtJsonDetail;
         private readonly SplitContainer _splitMain;
@@ -42,41 +46,38 @@ namespace CloudFlowExplorer
         private BindingList<FlowRecord> _displayedFlows = new();
         private List<int> _jsonMatchPositions = new();
         private int _currentMatchIndex = -1;
+        private bool _exactMatch;
+        private bool _splitterInitialised;
 
         public CloudFlowExplorerControl()
         {
             Dock = DockStyle.Fill;
-            Font = new Font("Segoe UI", 9f);
+            Font = FluentStyle.Regular;
+            BackColor = FluentStyle.PageBackground;
 
-            // --- Top panel: actions (left), connection status (right), search row below ---
-            var panelTop = new Panel { Dock = DockStyle.Top, Height = 84, Padding = new Padding(10, 8, 10, 6) };
+            // --- Header band: logo + title (left), connection status (right) ---
+            var panelHeader = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = FluentStyle.Navy, Padding = new Padding(12, 0, 12, 0) };
 
-            // Row 1: action buttons on the left, connection status on the right.
-            var rowActions = new Panel { Dock = DockStyle.Top, Height = 34 };
-
-            var panelActionsLeft = new FlowLayoutPanel
+            var logoHost = new Panel { Dock = DockStyle.Left, Width = 42, BackColor = FluentStyle.Navy };
+            logoHost.Controls.Add(new PictureBox
             {
+                Image = LoadLogo(),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                BackColor = Color.White,
+                Size = new Size(30, 30),
+                Location = new Point(0, 5)
+            });
+
+            var lblAppTitle = new System.Windows.Forms.Label
+            {
+                Text = "Cloud Flow Explorer",
+                AutoSize = false,
+                Width = 220,
                 Dock = DockStyle.Left,
-                AutoSize = true,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = FluentStyle.Title,
+                ForeColor = Color.White
             };
-
-            _btnLoad = new Button { Text = "Load Cloud Flows", Width = 180, Height = 30, Enabled = false, Margin = new Padding(0, 0, 8, 0) };
-            _btnLoad.Click += OnLoadClick;
-            ApplyButtonGlyph(_btnLoad, "\uE753", AccentColor);
-
-            _btnLoadFromSolution = new Button { Text = "Load Flows from Solution", Width = 210, Height = 30, Enabled = false, Margin = new Padding(0, 0, 8, 0) };
-            _btnLoadFromSolution.Click += OnLoadFromSolutionClick;
-            ApplyButtonGlyph(_btnLoadFromSolution, "\uE8B7", AccentColor);
-
-            _btnExportExcel = new Button { Text = "Export to Excel", Width = 160, Height = 30, Enabled = false, Margin = new Padding(0, 0, 0, 0) };
-            _btnExportExcel.Click += OnExportExcelClick;
-            ApplyButtonGlyph(_btnExportExcel, "\uE74E", Color.FromArgb(33, 115, 70));
-
-            // The glyph is now rendered as the button's own image (see ApplyButtonGlyph), so each
-            // icon is unambiguously tied to its command instead of floating next to the button.
-            panelActionsLeft.Controls.AddRange(new Control[] { _btnLoad, _btnLoadFromSolution, _btnExportExcel });
 
             var panelConnectionRight = new FlowLayoutPanel
             {
@@ -84,7 +85,7 @@ namespace CloudFlowExplorer
                 AutoSize = true,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right
+                BackColor = FluentStyle.Navy
             };
 
             _lblConnectionDot = new System.Windows.Forms.Label
@@ -92,104 +93,123 @@ namespace CloudFlowExplorer
                 Text = "\u25CF",
                 AutoSize = true,
                 ForeColor = Color.Silver,
-                Margin = new Padding(0, 6, 4, 0)
+                Margin = new Padding(0, 11, 4, 0)
             };
             _lblConnectionPrefix = new System.Windows.Forms.Label
             {
                 Text = "Not connected.",
                 AutoSize = true,
-                ForeColor = Color.Gray,
-                Margin = new Padding(0, 7, 4, 0)
+                ForeColor = Color.FromArgb(200, 210, 225),
+                Margin = new Padding(0, 12, 4, 0)
             };
             _lblConnectionValue = new System.Windows.Forms.Label
             {
                 Text = "",
                 AutoSize = true,
-                Font = new Font(Font, FontStyle.Bold),
-                ForeColor = Color.Black,
-                Margin = new Padding(0, 7, 0, 0)
+                Font = FluentStyle.Semibold,
+                ForeColor = Color.White,
+                Margin = new Padding(0, 12, 0, 0)
             };
-            var btnReportBug = new Button { Text = "Report a bug", Width = 130, Height = 30, Margin = new Padding(0, 0, 16, 0) };
-            btnReportBug.Click += OnReportBugClick;
-            ApplyButtonGlyph(btnReportBug, "\uE7BA", Color.FromArgb(200, 60, 40));
+            panelConnectionRight.Controls.AddRange(new Control[] { _lblConnectionDot, _lblConnectionPrefix, _lblConnectionValue });
 
-            panelConnectionRight.Controls.AddRange(new Control[] { btnReportBug, _lblConnectionDot, _lblConnectionPrefix, _lblConnectionValue });
+            panelHeader.Controls.Add(panelConnectionRight);
+            panelHeader.Controls.Add(lblAppTitle);
+            panelHeader.Controls.Add(logoHost);
 
-            rowActions.Controls.Add(panelConnectionRight);
-            rowActions.Controls.Add(panelActionsLeft);
-
-            // Row 2: search bar.
-            var rowSearch = new Panel { Dock = DockStyle.Top, Height = 34 };
-
-            var panelSearch = new TableLayoutPanel
+            // --- Command bar ---
+            var panelCommandBar = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill,
-                ColumnCount = 6,
-                RowCount = 1
+                Dock = DockStyle.Top,
+                AutoSize = true,
+                MinimumSize = new Size(0, 41),
+                WrapContents = true,
+                BackColor = FluentStyle.Surface,
+                Margin = Padding.Empty,
+                Padding = new Padding(6, 0, 6, 0)
             };
-            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
-            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            panelSearch.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            FluentStyle.AddBottomBorder(panelCommandBar);
 
-            var lblSearch = new System.Windows.Forms.Label { Text = "Search keyword:", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 9, 8, 0) };
-            // The icon is boxed to the label's own height/top-margin so its glyph centers on the
-            // same line as the label text instead of floating a couple of pixels off.
-            var iconSearch = CreateIconLabel("\uE721", AccentColor, lblSearch.Height, lblSearch.Margin.Top);
+            _btnLoad = new CommandButton { Text = "Load Cloud Flows", Glyph = "\uE753", Enabled = false };
+            _btnLoad.Click += OnLoadClick;
+
+            _btnLoadFromSolution = new CommandButton { Text = "Load Flows from Solution", Glyph = "\uE8B7", Enabled = false };
+            _btnLoadFromSolution.Click += OnLoadFromSolutionClick;
+
+            _btnExportExcel = new CommandButton { Text = "Export to Excel", Glyph = "\uE74E", GlyphColor = Color.FromArgb(33, 115, 70), Enabled = false };
+            _btnExportExcel.Click += OnExportExcelClick;
+
+            panelCommandBar.Controls.AddRange(new Control[] { _btnLoad, _btnLoadFromSolution, _btnExportExcel });
+
+            // --- Left rail: search mode + bug report ---
+            _rail = new NavRail();
+            _rail.AddHeading("SEARCH MODE");
+            _rail.AddChoice(ModeGeneral, "\uE721", "General search");
+            _rail.AddChoice(ModeExact, "\uE71C", "Exact word search");
+            _rail.AddBottomAction(ActionReportBug, "\uE7BA", "Report a bug");
+            _rail.ItemSelected += (s, id) => _exactMatch = id == ModeExact;
+            _rail.ActionInvoked += (s, id) => { if (id == ActionReportBug) OnReportBugClick(s, EventArgs.Empty); };
+            _rail.Select(ModeGeneral);
+
+            // --- Centre: search row, flow grid, status bar ---
+            var panelCenter = new Panel { Dock = DockStyle.Fill, BackColor = FluentStyle.PageBackground };
+
+            var rowSearch = new Panel { Dock = DockStyle.Top, Height = 52, BackColor = FluentStyle.PageBackground, Padding = new Padding(12, 10, 12, 10) };
+
+            _btnSearch = new Button { Text = "Search", Width = 90, Dock = DockStyle.Right };
+            _btnSearch.Click += OnSearchClick;
+            FluentStyle.StyleButton(_btnSearch, primary: true);
+
+            var searchHost = FluentStyle.CreateBorderedHost();
+            searchHost.Dock = DockStyle.Fill;
+            searchHost.Padding = new Padding(1);
+
+            var iconSearch = new System.Windows.Forms.Label
+            {
+                Text = "\uE721",
+                Font = FluentStyle.IconFont,
+                ForeColor = FluentStyle.Accent,
+                Dock = DockStyle.Left,
+                Width = 32,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
 
             _txtSearch = new TextBox
             {
                 Dock = DockStyle.Fill,
-                ForeColor = Color.Gray,
-                Text = SearchPlaceholder,
-                Margin = new Padding(0, 4, 10, 0)
+                BorderStyle = BorderStyle.None,
+                ForeColor = FluentStyle.TextDisabled,
+                BackColor = FluentStyle.Surface,
+                Text = SearchPlaceholder
             };
-            _txtSearch.Enter += (s, e) => { if (_txtSearch.Text == SearchPlaceholder) { _txtSearch.Text = ""; _txtSearch.ForeColor = SystemColors.WindowText; } };
-            _txtSearch.Leave += (s, e) => { if (string.IsNullOrWhiteSpace(_txtSearch.Text)) { _txtSearch.Text = SearchPlaceholder; _txtSearch.ForeColor = Color.Gray; } };
+            _txtSearch.Enter += (s, e) => { if (_txtSearch.Text == SearchPlaceholder) { _txtSearch.Text = ""; _txtSearch.ForeColor = FluentStyle.TextPrimary; } };
+            _txtSearch.Leave += (s, e) => { if (string.IsNullOrWhiteSpace(_txtSearch.Text)) { _txtSearch.Text = SearchPlaceholder; _txtSearch.ForeColor = FluentStyle.TextDisabled; } };
             _txtSearch.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { OnSearchClick(s, e); e.SuppressKeyPress = true; } };
 
-            _chkExactMatch = new CheckBox
+            // Wrapper with top padding vertically centres the single-line text box in the 30px host.
+            var textWrap = new Panel { Dock = DockStyle.Fill, BackColor = FluentStyle.Surface, Padding = new Padding(0, 6, 8, 0) };
+            textWrap.Controls.Add(_txtSearch);
+
+            searchHost.Controls.Add(textWrap);
+            searchHost.Controls.Add(iconSearch);
+
+            rowSearch.Controls.Add(searchHost);
+            rowSearch.Controls.Add(new Panel { Dock = DockStyle.Right, Width = 8 });
+            rowSearch.Controls.Add(_btnSearch);
+
+            var panelStatus = new Panel { Dock = DockStyle.Bottom, Height = 26, BackColor = FluentStyle.Surface, Padding = new Padding(12, 0, 12, 0) };
+            panelStatus.Paint += (s, e) =>
             {
-                Text = "Whole word",
-                AutoSize = true,
-                Anchor = AnchorStyles.Left,
-                Margin = new Padding(0, 6, 10, 0)
+                using var pen = new Pen(FluentStyle.Border);
+                e.Graphics.DrawLine(pen, 0, 0, panelStatus.Width, 0);
             };
-            var toolTip = new ToolTip();
-            toolTip.SetToolTip(_chkExactMatch, "Match the exact word only (e.g. \"cat\" will not match \"category\").");
-
-            _btnSearch = new Button { Text = "Search", Width = 70, Height = 28, Margin = new Padding(0, 2, 10, 0) };
-            _btnSearch.Click += OnSearchClick;
-
-            _lblFlowCount = new System.Windows.Forms.Label { Text = "", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0, 9, 0, 0) };
-
-            // Icon + label are grouped in a nested panel so they occupy a single
-            // TableLayoutPanel column/cell together.
-            var searchLabelGroup = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false, Margin = new Padding(0) };
-            searchLabelGroup.Controls.AddRange(new Control[] { iconSearch, lblSearch });
-
-            panelSearch.Controls.Add(searchLabelGroup, 0, 0);
-            panelSearch.Controls.Add(_txtSearch, 2, 0);
-            panelSearch.Controls.Add(_chkExactMatch, 3, 0);
-            panelSearch.Controls.Add(_btnSearch, 4, 0);
-            panelSearch.Controls.Add(_lblFlowCount, 5, 0);
-
-            rowSearch.Controls.Add(panelSearch);
-
-            panelTop.Controls.Add(rowSearch);
-            panelTop.Controls.Add(rowActions);
-
-            // --- Split container: grid + JSON viewer ---
-            _splitMain = new SplitContainer
+            _lblFlowCount = new System.Windows.Forms.Label
             {
+                Text = "",
                 Dock = DockStyle.Fill,
-                Orientation = Orientation.Horizontal,
-                SplitterDistance = 300,
-                Panel1MinSize = 150,
-                Panel2MinSize = 100
+                TextAlign = ContentAlignment.MiddleLeft,
+                ForeColor = FluentStyle.TextSecondary
             };
+            panelStatus.Controls.Add(_lblFlowCount);
 
             _gridFlows = new DataGridView
             {
@@ -199,56 +219,70 @@ namespace CloudFlowExplorer
                 AllowUserToDeleteRows = false,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
-                BackgroundColor = SystemColors.Window,
-                BorderStyle = BorderStyle.None,
-                RowHeadersVisible = false,
-                EnableHeadersVisualStyles = false,
-                GridColor = Color.FromArgb(230, 230, 230)
+                MultiSelect = false
             };
-            _gridFlows.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(243, 243, 243);
-            _gridFlows.ColumnHeadersDefaultCellStyle.ForeColor = Color.Black;
-            _gridFlows.ColumnHeadersDefaultCellStyle.Font = new Font(Font, FontStyle.Bold);
-            _gridFlows.ColumnHeadersHeight = 32;
-            _gridFlows.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(249, 249, 249);
+            FluentStyle.StyleGrid(_gridFlows);
             _gridFlows.SelectionChanged += OnFlowSelectionChanged;
             _gridFlows.CellContentClick += OnGridCellContentClick;
             _gridFlows.CellFormatting += OnGridCellFormatting;
             _gridFlows.DataSource = _displayedFlows;
 
-            // --- JSON viewer with an occurrence navigator above it ---
-            var panelJsonHeader = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = Color.FromArgb(245, 245, 245) };
+            panelCenter.Controls.Add(_gridFlows);
+            panelCenter.Controls.Add(panelStatus);
+            panelCenter.Controls.Add(rowSearch);
+
+            // --- Right: JSON viewer with an occurrence navigator above it ---
+            var panelRight = new Panel { Dock = DockStyle.Fill, BackColor = FluentStyle.Surface };
+
+            var panelJsonHeader = new Panel { Dock = DockStyle.Top, Height = 40, BackColor = FluentStyle.Surface, Padding = new Padding(12, 0, 8, 0) };
+            FluentStyle.AddBottomBorder(panelJsonHeader);
+
+            var lblJsonTitle = new System.Windows.Forms.Label
+            {
+                Text = "Flow definition",
+                Dock = DockStyle.Left,
+                AutoSize = false,
+                Width = 160,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Font = FluentStyle.Semibold,
+                ForeColor = FluentStyle.TextPrimary
+            };
 
             var panelOccurrenceNav = new FlowLayoutPanel
             {
                 Dock = DockStyle.Right,
                 AutoSize = true,
                 FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false
+                WrapContents = false,
+                BackColor = FluentStyle.Surface
             };
 
-            _btnPrevMatch = new Button { Text = "\u25C0", Width = 26, Height = 24, Enabled = false, Margin = new Padding(0, 3, 4, 0) };
+            _btnPrevMatch = new Button { Text = "\u25C0", Width = 28, Height = 24, Enabled = false, Margin = new Padding(0, 8, 4, 0) };
             _btnPrevMatch.Click += (s, e) => MoveMatch(-1);
+            FluentStyle.StyleIconButton(_btnPrevMatch);
 
-            _btnNextMatch = new Button { Text = "\u25B6", Width = 26, Height = 24, Enabled = false, Margin = new Padding(0, 3, 10, 0) };
+            _btnNextMatch = new Button { Text = "\u25B6", Width = 28, Height = 24, Enabled = false, Margin = new Padding(0, 8, 4, 0) };
             _btnNextMatch.Click += (s, e) => MoveMatch(1);
+            FluentStyle.StyleIconButton(_btnNextMatch);
 
             _lblOccurrenceCount = new System.Windows.Forms.Label
             {
                 Text = "No search term",
                 AutoSize = true,
-                ForeColor = Color.DimGray,
-                Margin = new Padding(0, 8, 10, 0)
+                ForeColor = FluentStyle.TextSecondary,
+                Margin = new Padding(0, 12, 10, 0)
             };
 
             panelOccurrenceNav.Controls.AddRange(new Control[] { _lblOccurrenceCount, _btnPrevMatch, _btnNextMatch });
             panelJsonHeader.Controls.Add(panelOccurrenceNav);
+            panelJsonHeader.Controls.Add(lblJsonTitle);
 
             _txtJsonDetail = new RichTextBox
             {
                 Dock = DockStyle.Fill,
                 Multiline = true,
                 ReadOnly = true,
+                BorderStyle = BorderStyle.None,
                 ScrollBars = RichTextBoxScrollBars.Both,
                 WordWrap = false,
                 Font = new Font("Cascadia Code", 9f, FontStyle.Regular),
@@ -256,120 +290,45 @@ namespace CloudFlowExplorer
                 ForeColor = Color.FromArgb(212, 212, 212)
             };
 
-            _splitMain.Panel1.Controls.Add(_gridFlows);
-            _splitMain.Panel2.Controls.Add(_txtJsonDetail);
-            _splitMain.Panel2.Controls.Add(panelJsonHeader);
+            panelRight.Controls.Add(_txtJsonDetail);
+            panelRight.Controls.Add(panelJsonHeader);
 
-            // --- Assemble ---
-            Controls.Add(_splitMain);
-            Controls.Add(panelTop);
-        }
-
-        /// <summary>
-        /// Creates a square icon glyph label. When <paramref name="matchHeight"/>/<paramref name="matchMarginTop"/>
-        /// are supplied, the label's box is sized to match a companion control (button or text label) so the
-        /// glyph's vertical center lines up with it, instead of relying on independently-guessed margins.
-        /// </summary>
-        private static System.Windows.Forms.Label CreateIconLabel(string glyph, Color color, int? matchHeight = null, int? matchMarginTop = null, int size = 14)
-        {
-            int height = matchHeight ?? size + 12;
-            int marginTop = matchMarginTop ?? 2;
-            return new System.Windows.Forms.Label
+            // --- Centre | right split ---
+            _splitMain = new SplitContainer
             {
-                Text = glyph,
-                Font = new Font("Segoe MDL2 Assets", size, FontStyle.Regular),
-                AutoSize = false,
-                Width = size + 12,
-                Height = height,
-                TextAlign = ContentAlignment.MiddleCenter,
-                ForeColor = color,
-                Margin = new Padding(0, marginTop, 2, 0)
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Vertical,
+                SplitterWidth = 5,
+                BackColor = FluentStyle.Border
             };
-        }
-
-        /// <summary>
-        /// Renders a Segoe MDL2 Assets glyph into the button's own <see cref="Button.Image"/> (left-aligned),
-        /// so the icon is unmistakably part of that one command instead of sitting in an adjacent label that
-        /// could be read as belonging to either neighbor.
-        /// </summary>
-        private static void ApplyButtonGlyph(Button button, string glyph, Color color, int size = 16)
-        {
-            int boxSize = size + 4;
-            const int gapAfterIcon = 8;
-            button.Image = CreateCenteredGlyphBitmap(glyph, color, size, boxSize, gapAfterIcon);
-            button.ImageAlign = ContentAlignment.MiddleLeft;
-            button.TextAlign = ContentAlignment.MiddleCenter;
-            button.TextImageRelation = TextImageRelation.ImageBeforeText;
-            button.Padding = new Padding(10, 0, 4, 0);
-        }
-
-        /// <summary>
-        /// Renders an icon-font glyph into a fixed-size bitmap, centered on its actual visible ink
-        /// rather than the font's nominal character cell. Segoe MDL2 Assets glyphs (cloud, folder,
-        /// save, etc.) each carry different internal padding by design, so centering on the cell
-        /// (via DrawString/TextRenderer alone) places different icons at different visual heights.
-        /// Measuring the real painted pixels and re-centering those removes that inconsistency.
-        /// The ink is also scaled down (preserving aspect ratio) if it would otherwise overflow the
-        /// box - some glyphs (e.g. the cloud icon) are noticeably wider than the nominal font cell.
-        /// An extra transparent strip (<paramref name="gapAfterIcon"/>) is appended to the right of
-        /// the icon so the button's text doesn't crowd it.
-        /// </summary>
-        private static Bitmap CreateCenteredGlyphBitmap(string glyph, Color color, int fontSize, int boxSize, int gapAfterIcon = 0)
-        {
-            // Render oversized on a scratch canvas first so the glyph has room to spill outside a
-            // tight box before we measure and re-center its actual ink.
-            int scratchSize = boxSize * 3;
-            using var scratch = new Bitmap(scratchSize, scratchSize);
-            using (var g = Graphics.FromImage(scratch))
-            using (var font = new Font("Segoe MDL2 Assets", fontSize, FontStyle.Regular))
+            _splitMain.Panel1.Controls.Add(panelCenter);
+            _splitMain.Panel2.Controls.Add(panelRight);
+            _splitMain.SizeChanged += (s, e) =>
             {
-                g.Clear(Color.Transparent);
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                TextRenderer.DrawText(g, glyph, font, new Rectangle(0, 0, scratchSize, scratchSize), color,
-                    Color.Transparent, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            }
+                // Min sizes can only be applied once the control is wide enough to honour them.
+                if (_splitterInitialised) return;
+                int distance = (int)(_splitMain.Width * 0.58);
+                if (distance < 320 || _splitMain.Width - distance < 260) return;
+                _splitMain.Panel1MinSize = 320;
+                _splitMain.Panel2MinSize = 260;
+                _splitMain.SplitterDistance = distance;
+                _splitterInitialised = true;
+            };
 
-            Rectangle ink = FindInkBounds(scratch);
-            var result = new Bitmap(boxSize + gapAfterIcon, boxSize);
-            using (var g = Graphics.FromImage(result))
-            {
-                g.Clear(Color.Transparent);
-                if (ink.Width > 0 && ink.Height > 0)
-                {
-                    float scale = Math.Min(1f, Math.Min((float)boxSize / ink.Width, (float)boxSize / ink.Height));
-                    int destWidth = (int)Math.Round(ink.Width * scale);
-                    int destHeight = (int)Math.Round(ink.Height * scale);
-                    int destX = (boxSize - destWidth) / 2;
-                    int destY = (boxSize - destHeight) / 2;
-                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                    g.DrawImage(scratch, new Rectangle(destX, destY, destWidth, destHeight), ink, GraphicsUnit.Pixel);
-                }
-            }
-            return result;
+            // --- Assemble (dock order: fill first, then rail, command bar, header) ---
+            Controls.Add(_splitMain);
+            Controls.Add(_rail);
+            Controls.Add(panelCommandBar);
+            Controls.Add(panelHeader);
         }
 
-        private static Rectangle FindInkBounds(Bitmap bmp)
+        private static Image? LoadLogo()
         {
-            int minX = bmp.Width, minY = bmp.Height, maxX = -1, maxY = -1;
-            for (int y = 0; y < bmp.Height; y++)
-            {
-                for (int x = 0; x < bmp.Width; x++)
-                {
-                    if (bmp.GetPixel(x, y).A > 15)
-                    {
-                        if (x < minX) minX = x;
-                        if (x > maxX) maxX = x;
-                        if (y < minY) minY = y;
-                        if (y > maxY) maxY = y;
-                    }
-                }
-            }
-
-            return maxX < minX || maxY < minY
-                ? Rectangle.Empty
-                : Rectangle.FromLTRB(minX, minY, maxX + 1, maxY + 1);
+            using var stream = System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("CloudFlowExplorer.logo.png");
+            if (stream == null) return null;
+            using var original = Image.FromStream(stream);
+            return new Bitmap(original);
         }
-
         /// <summary>
         /// Called by XrmToolBox whenever the active connection changes.
         /// </summary>
@@ -382,14 +341,14 @@ namespace CloudFlowExplorer
             _btnLoadFromSolution.Enabled = connected;
             _btnExportExcel.Enabled = connected && _displayedFlows.Count > 0;
 
-            _lblConnectionDot.ForeColor = connected ? Color.FromArgb(16, 124, 16) : Color.Silver;
+            _lblConnectionDot.ForeColor = connected ? Color.FromArgb(108, 203, 95) : Color.Silver;
             _lblConnectionPrefix.Text = connected ? "Connected to:" : "Not connected.";
-            _lblConnectionPrefix.ForeColor = connected ? Color.Black : Color.Gray;
+            _lblConnectionPrefix.ForeColor = Color.FromArgb(200, 210, 225);
             _lblConnectionValue.Text = connected
                 ? ConnectionDetail?.OrganizationFriendlyName ?? ""
                 : "Use the connection button in the toolbar above to connect.";
-            _lblConnectionValue.Font = new Font(Font, connected ? FontStyle.Bold : FontStyle.Regular);
-            _lblConnectionValue.ForeColor = connected ? Color.Black : Color.Gray;
+            _lblConnectionValue.Font = connected ? FluentStyle.Semibold : FluentStyle.Regular;
+            _lblConnectionValue.ForeColor = connected ? Color.White : Color.FromArgb(200, 210, 225);
         }
 
         private void OnLoadClick(object? sender, EventArgs e)
@@ -540,7 +499,7 @@ namespace CloudFlowExplorer
             var keyword = GetSearchKeyword();
             if (_allFlows.Count == 0) return;
 
-            bool exact = _chkExactMatch.Checked;
+            bool exact = _exactMatch;
             List<FlowRecord> filtered;
             if (string.IsNullOrEmpty(keyword))
             {
@@ -655,7 +614,7 @@ namespace CloudFlowExplorer
             _txtJsonDetail.DeselectAll();
 
             var keyword = GetSearchKeyword();
-            _jsonMatchPositions = FindMatchPositions(text ?? "", keyword, _chkExactMatch.Checked);
+            _jsonMatchPositions = FindMatchPositions(text ?? "", keyword, _exactMatch);
             _currentMatchIndex = _jsonMatchPositions.Count > 0 ? 0 : -1;
 
             for (int i = 0; i < _jsonMatchPositions.Count; i++)
@@ -769,20 +728,17 @@ namespace CloudFlowExplorer
                     "Draft" => Color.DimGray,
                     _ => _gridFlows.DefaultCellStyle.ForeColor
                 };
-                e.CellStyle.Font = new Font(_gridFlows.Font, FontStyle.Bold);
+                e.CellStyle.Font = FluentStyle.Semibold;
                 return;
             }
 
             if (columnName == "OpenFlow" &&
                 _gridFlows.Rows[e.RowIndex].Cells[e.ColumnIndex] is DataGridViewLinkCell linkCell)
             {
-                // The link's own text color (not CellStyle.ForeColor) is what DataGridViewLinkCell
-                // paints with, so on a selected row - whose background becomes the same blue as the
-                // link - the link color must switch to white or it reads as invisible.
-                bool selected = _gridFlows.Rows[e.RowIndex].Selected;
-                linkCell.LinkColor = selected ? Color.White : AccentColor;
-                linkCell.ActiveLinkColor = selected ? Color.White : Color.FromArgb(0, 71, 171);
-                linkCell.VisitedLinkColor = selected ? Color.White : AccentColor;
+                // Selection uses a light tint, so the link keeps its accent colour on selected rows.
+                linkCell.LinkColor = AccentColor;
+                linkCell.ActiveLinkColor = Color.FromArgb(0, 71, 171);
+                linkCell.VisitedLinkColor = AccentColor;
             }
         }
 
